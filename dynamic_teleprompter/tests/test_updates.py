@@ -12,13 +12,13 @@ from release_info import PRODUCT, REPOSITORY
 
 
 class UpdateTests(unittest.TestCase):
-    def release(self, tag='v0.5.0-alpha18'):
+    def release(self, tag='v0.5.0-alpha99'):
         name = f'{PRODUCT}-{tag}-Windows-x64.zip'
         return {'tag_name': tag, 'prerelease': '-' in tag, 'assets': [{
             'name': name, 'digest': 'sha256:' + 'a' * 64,
             'browser_download_url': f'https://github.com/{REPOSITORY}/releases/download/{tag}/{name}'}]}
 
-    def archive(self, version='0.5.0-alpha18', extra=None):
+    def archive(self, version='0.5.0-alpha99', extra=None):
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w') as archive:
             prefix = f'app/versions/{version}/'
@@ -56,7 +56,7 @@ class UpdateTests(unittest.TestCase):
             release['sha256'], release['size'] = hashlib.sha256(archive).hexdigest(), len(archive)
             with patch.object(updates.urllib.request, 'urlopen', return_value=io.BytesIO(archive)):
                 updates.install_update(release, root)
-            self.assertEqual(json.loads((root / 'app/current.json').read_text())['version'], '0.5.0-alpha18')
+            self.assertEqual(json.loads((root / 'app/current.json').read_text())['version'], '0.5.0-alpha99')
             self.assertEqual((root / 'Cosmere Cam.exe').read_bytes(), b'original launcher')
             self.assertEqual((root / 'project.json').read_text(), 'user data')
             updates.rollback(root)
@@ -73,14 +73,14 @@ class UpdateTests(unittest.TestCase):
             self.assertFalse((root / 'app/current.json').exists())
 
     def test_traversal_duplicate_and_wrong_identity_are_rejected(self):
-        for name in ('../escape.exe', 'app/versions/0.5.0-alpha18/../../escape.exe', 'C:\\escape.exe'):
+        for name in ('../escape.exe', 'app/versions/0.5.0-alpha99/../../escape.exe', 'C:\\escape.exe'):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 archive = root / 'download.zip'
                 archive.write_bytes(self.archive(extra=(name, b'bad')))
                 with self.assertRaisesRegex(ValueError, 'Unsafe path'):
-                    updates.extract_version(archive, root, '0.5.0-alpha18')
-                self.assertFalse((root / 'app/versions/0.5.0-alpha18').exists())
+                    updates.extract_version(archive, root, '0.5.0-alpha99')
+                self.assertFalse((root / 'app/versions/0.5.0-alpha99').exists())
 
 
 if __name__ == '__main__':

@@ -16,7 +16,7 @@ DEFAULT_ANIMATION = {
     'breath_period': 4.0,
     'breath_strength': 0.65,
     'lip_enabled': True,
-    'lip_sensitivity': 3.5,
+    'lip_sensitivity': 15.0,
     'lip_threshold': 0.018,
 }
 

@@ -27,6 +27,20 @@ jobs:
         run: python -m pip install -r requirements-release.txt
       - name: Compile Python source
         run: python -m compileall -q dynamic_teleprompter launcher.py tools
+      - name: Build native audio and canvas engines
+        shell: pwsh
+        run: |
+          cmake -S dynamic_teleprompter/native -B build/native
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+          cmake --build build/native --config Release
+          if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
+          $dll = Get-ChildItem build/native -Recurse -Filter dt_engine.dll | Select-Object -First 1
+          if (-not $dll) { throw 'Native engine DLL missing' }
+          Copy-Item -LiteralPath $dll.FullName -Destination dynamic_teleprompter/native/dt_engine.dll -Force
+          $rn = Get-ChildItem build/native -Recurse -Filter rnnoise.dll | Select-Object -First 1
+          if (-not $rn) { throw 'RNNoise DLL missing' }
+          Copy-Item -LiteralPath $rn.FullName -Destination dynamic_teleprompter/native/rnnoise.dll -Force
+          Copy-Item build/native/RNNoise-LICENSE.txt docs/RNNoise-LICENSE.txt
       - name: Regression tests
         working-directory: dynamic_teleprompter
         env:
@@ -57,7 +71,7 @@ jobs:
           cache-dependency-path: requirements-release.txt
       - name: Install build dependencies
         run: python -m pip install -r requirements-release.txt
-      - name: Build optional native engine
+      - name: Build native audio and canvas engines
         shell: pwsh
         run: |
           cmake -S dynamic_teleprompter/native -B build/native
@@ -67,6 +81,10 @@ jobs:
           $dll = Get-ChildItem build/native -Recurse -Filter dt_engine.dll | Select-Object -First 1
           if (-not $dll) { throw 'Native engine DLL missing' }
           Copy-Item -LiteralPath $dll.FullName -Destination dynamic_teleprompter/native/dt_engine.dll -Force
+          $rn = Get-ChildItem build/native -Recurse -Filter rnnoise.dll | Select-Object -First 1
+          if (-not $rn) { throw 'RNNoise DLL missing' }
+          Copy-Item -LiteralPath $rn.FullName -Destination dynamic_teleprompter/native/rnnoise.dll -Force
+          Copy-Item build/native/RNNoise-LICENSE.txt docs/RNNoise-LICENSE.txt
       - name: Build and verify portable executable
         run: python tools/build_release.py
       - uses: actions/upload-artifact@v4
@@ -90,5 +108,5 @@ jobs:
           $existing = gh release view $tag --json tagName 2>$null
           if ($LASTEXITCODE -eq 0) { throw 'This version is already published. Bump VERSION before another release.' }
           $assets = @(Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName)
-          gh release create $tag @assets --target $env:GITHUB_SHA --title "Cosmere Cam $tag" --notes-file docs/RELEASE-alpha17.md --prerelease
+          gh release create $tag @assets --target $env:GITHUB_SHA --title "Cosmere Cam $tag" --notes-file docs/RELEASE-alpha18.md --prerelease
           if ($LASTEXITCODE -ne 0) { throw 'Publishing the release failed' }

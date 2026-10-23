@@ -43,8 +43,8 @@ def _process_vst3(data, entry):
 
 from native_engine import process_audio_s16
 
-EFFECT_NAMES = {'gain': 'Gain', 'gate': 'Noise Gate', 'clip': 'Soft Clip'}
-DEFAULT_CHAIN = [dict(type='gain', enabled=True), dict(type='gate', enabled=False),
+EFFECT_NAMES = {'suppress': 'Noise Suppression (RNNoise)', 'eq': 'Parametric EQ', 'gain': 'Gain', 'gate': 'Noise Gate', 'clip': 'Soft Clip'}
+DEFAULT_CHAIN = [dict(type='suppress', enabled=False, strength=80), dict(type='eq', enabled=False), dict(type='gain', enabled=True), dict(type='gate', enabled=False),
                  dict(type='clip', enabled=False)]
 
 
@@ -64,7 +64,16 @@ def normalize_chain(chain):
                                    parameters=dict(entry.get('parameters', {})) if isinstance(entry.get('parameters', {}), dict) else {}))
             continue
         if kind in EFFECT_NAMES and kind not in used:
-            result.append(dict(type=kind, enabled=bool(entry.get('enabled', True))))
+            clean = dict(type=kind, enabled=bool(entry.get('enabled', True)))
+            if kind == 'eq':
+                from mic_dsp import bands_value
+                clean['bands'] = bands_value(entry.get('bands'))
+            if kind == 'suppress':
+                clean['strength'] = max(0, min(100, float(entry.get('strength', 80))))
+            if kind == 'gate':
+                clean.update(attack=max(.1, min(100, float(entry.get('attack', 5)))),
+                             release=max(10, min(2000, float(entry.get('release', 150)))))
+            result.append(clean)
             used.add(kind)
     for entry in DEFAULT_CHAIN:
         if entry['type'] not in used:
@@ -79,15 +88,28 @@ def process_chain(data, chain, gain=100, gate_db=-45, clip_drive=150):
     """
     started = time.perf_counter()
     block_budget_ms = len(data) / 2 / 48000 * 1000
+    state = getattr(_thread_state, 'processors', None)
+    if state is None:
+        state = _thread_state.processors = {}
     for entry in normalize_chain(chain):
-        if not entry['enabled']:
-            continue
         kind = entry['type']
+        if not entry['enabled']:
+            state.pop(kind, None)
+            state.pop(kind + '_key', None)
+            continue
         if kind == 'gain':
             data, _ = process_audio_s16(data, int(gain), 0)
-        elif kind == 'gate':
-            threshold = round(32767 * 10 ** (int(gate_db) / 20))
-            data, _ = process_audio_s16(data, 100, threshold)
+        elif kind in ('gate', 'suppress', 'eq'):
+            from mic_dsp import process_builtin
+            samples = np.frombuffer(data, dtype='<i2').astype(np.float32) / 32768
+            try:
+                samples = process_builtin(samples, entry, state, gate_db)
+                data = np.clip(np.rint(samples * 32768), -32768, 32767).astype('<i2').tobytes()
+                with _error_lock:
+                    _plugin_errors.pop(kind, None)
+            except Exception as exc:
+                with _error_lock:
+                    _plugin_errors[kind] = str(exc)
         elif kind == 'vst3':
             try:
                 data = _process_vst3(data, entry)

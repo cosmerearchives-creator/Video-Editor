@@ -40,6 +40,31 @@ class PostRenderingTests(unittest.TestCase):
         self.assertTrue(out.scene.labels[0].isVisibleTo(out.scene))
         self.assertEqual(out.scene.labels[0].text(), 'Hello')
 
+    def test_text_layer_position_matches_live_and_offline_export(self):
+        import numpy as np
+        out = app.OutputWindow()
+        self.addCleanup(out.close)
+        out._preview_timer.stop()
+        settings = dict(canvas_resolution='320x180', instant=True, transparent=True,
+            foreground='#ffffff', font_size=14, chars=30, motion=dict(intro='None',outro='None'),
+            media_layers=[dict(type='text',x=0,y=0,visible=True)])
+        def center(image):
+            ys,xs=np.nonzero(np.array([[image.pixelColor(x,y).alpha() for x in range(image.width())] for y in range(image.height())]))
+            return np.array([xs.mean(),ys.mean()])
+        out.set_output(['Hello','',''],settings)
+        original=center(out.render_frame())
+        settings['media_layers'][0].update(x=10,y=-10)
+        out.set_output(['Hello','',''],settings)
+        shifted=center(out.render_frame())
+        np.testing.assert_allclose(shifted-original,[32,-18],atol=1)
+        session=dict(groups=['Hello'],slides=[settings],resolution=[320,180],duration=3.)
+        words=[dict(text=t,slide=0,start=i+.2,end=i+.8,include=True,reviewed=True) for i,t in enumerate(('Hello',))]
+        timeline=TextTimeline(app.CanvasScene,session,words)
+        try:
+            np.testing.assert_allclose(center(timeline.frame(1.9)),shifted,atol=1)
+        finally:
+            timeline.close()
+
     def test_word_animation_uses_spoken_starts_and_original_style(self):
         for animation in app.ANIMATION_OPTIONS:
             with self.subTest(animation=animation):

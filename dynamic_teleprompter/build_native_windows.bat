@@ -16,7 +16,11 @@ cmake --build native_build --config Release
 if errorlevel 1 goto fail
 copy /Y "native_build\Release\dt_engine.dll" "native\dt_engine.dll"
 if errorlevel 1 goto fail
-echo Native engine installed. Restart Dynamic Teleprompter.
+copy /Y "native_build\Release\rnnoise.dll" "native\rnnoise.dll"
+if errorlevel 1 goto fail
+copy /Y "native_build\RNNoise-LICENSE.txt" "..\docs\RNNoise-LICENSE.txt"
+if errorlevel 1 goto fail
+echo Native engines installed. Restart Dynamic Teleprompter.
 pause
 exit /b 0
 :fail

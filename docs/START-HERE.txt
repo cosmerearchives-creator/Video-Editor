@@ -38,3 +38,18 @@ Windows may show a publisher/reputation prompt on the first launch.
 
 Source, releases and update downloads:
 https://github.com/cosmerearchives-creator/Video-Editor
+
+MICROPHONE EQ AND CLEANUP
+Recording > Microphone EQ / Noise Cleanup opens the six-band EQ and RNNoise
+controls. Enable EQ/suppression and Apply. Use the microphone monitor with
+headphones to hear changes. Suppression strength defaults to 80% when enabled;
+lower it if speech sounds processed. Fan noise and keyboard clicks can be
+reduced but overlapping clicks may remain. The smooth gate has attack/release.
+
+CONTINUING YOUR WORK
+The last working session restores automatically when you reopen the app.
+It autosaves every two seconds and on close, independently of named project
+files. Recording and microphone monitoring never restart automatically.
+
+In Visual Layer Editor, select Text Output and drag the preview to move text.
+Mouth sensitivity now defaults to 15 (range 0–100, step 1, decimals accepted).
