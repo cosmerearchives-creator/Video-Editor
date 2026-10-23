@@ -29,6 +29,20 @@ locally. The clean MP4 and its .assets folder remain available for re-export.
 Choose File → Review / Align Recorded Presentation to reopen a session. Turn off
 the post-recording option to use the original live-text recording workflow.
 
+## Microphone EQ, cleanup and session restore
+
+Recording → Microphone EQ / Noise Cleanup provides six parametric EQ bands and
+RNNoise speech suppression for fans and keyboard clicks. Enable the desired
+processor, Apply, and use microphone monitoring with headphones to preview.
+A smooth gate has configurable attack/release. Filters also process recordings;
+original speech is retained for alignment. The packaged build includes RNNoise.
+Source installs build it with dynamic_teleprompter/build_native_windows.bat.
+
+Select Text Output in Visual Layer Editor, then drag the preview or edit X/Y.
+Mouth sensitivity defaults to 15 and supports typed values 0–100 with steps of 1.
+The last working session restores automatically on startup. Autosave runs every
+two seconds and on close; named project files remain separate explicit saves.
+
 ## Development
 
 Python 3.13 is the CI baseline. Install requirements-release.txt, then run

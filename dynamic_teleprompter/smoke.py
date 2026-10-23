@@ -24,6 +24,15 @@ def run():
     from release_info import VERSION
 
     app = QApplication.instance() or QApplication([])
+    from mic_dsp import NoiseSuppressor, make_eq, DEFAULT_BANDS
+    import numpy as np
+    samples = np.random.default_rng(14).normal(0, .008, 512).astype(np.float32)
+    suppression = NoiseSuppressor()
+    for _ in range(120):
+        cleaned = suppression.process(samples, 1.)
+    assert len(cleaned) == len(samples) and np.isfinite(cleaned).all()
+    assert np.mean(cleaned ** 2) < np.mean(samples ** 2), 'RNNoise did not reduce steady noise'
+    assert make_eq(DEFAULT_BANDS)(samples, 48000).shape == samples.shape
     ffmpeg = resolve_ffmpeg()
     assert ffmpeg and Path(ffmpeg).is_file(), 'Bundled FFmpeg not found'
     settings = dict(font_size=24, foreground='#ffffff', chars=30,
@@ -98,7 +107,7 @@ def run():
                 export.cancel()
                 export.thread.join(5)
     result = {'success': True, 'version': VERSION, 'checks': [
-        'real control window startup', 'Qt presentation text painter', 'bundled FFmpeg', 'alpha foreground capture',
+        'real control window startup', 'bundled RNNoise processes audio', 'parametric EQ processes audio', 'Qt presentation text painter', 'bundled FFmpeg', 'alpha foreground capture',
         'deterministic aligned overlay frames', 'H.264/AAC final export',
         'foreground preserved above text', 'speech/camera/VST dependencies import']}
     if '--smoke-report' in sys.argv:
@@ -148,9 +157,61 @@ def run_window():
                 patch.object(application, 'MODEL_DIR', root / 'voice-model'), \
                 patch.object(application, 'QSettings', side_effect=lambda *args: QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat)), \
                 patch.object(application.MainWindow, 'prompt_model_if_missing', lambda self: None), \
-                patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Discard):
+                patch.object(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Discard):
             window = application.MainWindow()
             stage('control window constructed')
+            from mic_ui import MicrophoneEffectsDialog
+            from live2d_idle import DEFAULT_ANIMATION
+            from PySide6.QtWidgets import QDoubleSpinBox, QDialog
+            editor = application.VisualLayerEditor(window)
+            window.layer_editor = editor
+            window.script.setPlainText('Restored script with canvas text.')
+            window.prepare_groups()
+            window.next()
+            editor.items.setCurrentRow(0)
+            assert editor.x.isEnabled() and editor.y.isEnabled()
+            editor.drag_layer(12, -8)
+            assert window.media_layers[0]['x'] == 12
+            assert window.out.scene.text_container.x() == round(window.out.canvas_size[0] * .12)
+            # Probe real spinbox validation with a typed value above the old cap.
+            window.media_layers.insert(0, dict(type='live2d', name='test', path='', idle_enabled=False))
+            editor.refresh_items(0)
+            def inspect_idle(dialog):
+                box = dialog.findChild(QDoubleSpinBox, 'lip_sensitivity')
+                assert box.value() == DEFAULT_ANIMATION['lip_sensitivity'] == 15
+                assert box.minimum() == 0 and box.singleStep() == 1
+                box.lineEdit().setText('25.5')
+                box.interpretText()
+                assert box.value() == 25.5
+                dialog.reject()
+                return QDialog.DialogCode.Rejected
+            with patch.object(QDialog, 'exec', inspect_idle):
+                editor.edit_idle_animation()
+            window.media_layers.pop(0)
+            editor.refresh_items(0)
+            effects = MicrophoneEffectsDialog(window)
+            effects.eq_enabled.setChecked(True)
+            effects.suppress_enabled.setChecked(True)
+            effects.rows[1][3].setValue(3)
+            effects.apply()
+            assert next(e for e in window._audio_chain_snapshot() if e['type']=='eq')['bands'][1]['gain'] == 3
+            effects.reject()
+            effects.deleteLater()
+            # Restore through the same startup method, using isolated disk state.
+            with patch.dict(os.environ, {'COSMERE_CAM_NO_SESSION': ''}), \
+                    patch.object(application.MainWindow, 'session_path', lambda self: root / 'session.json'):
+                window.autosave_session()
+                assert (root / 'session.json').exists()
+                window.script.setPlainText('Changed')
+                window.media_layers[0]['x'] = 0
+                window.restore_session()
+                assert window.script.toPlainText() == 'Restored script with canvas text.'
+                assert window.media_layers[0]['x'] == 12
+                assert not window.awaiting_first
+            editor.close()
+            editor.deleteLater()
+            window.layer_editor = None
+            stage('text dragging, typed mouth sensitivity, EQ editor and session restore verified')
             assert window.record_post.isChecked() and window.updater is not None
             window.updater.automatic.setChecked(False)
             window.show()

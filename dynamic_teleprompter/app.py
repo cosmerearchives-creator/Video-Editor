@@ -1,6 +1,8 @@
-"""Dynamic Teleprompter v0.5.0-alpha16 — WASD Live2D movement.
+"""Dynamic Teleprompter — presentation, recording and Live2D canvas.
 Run: pip install -r requirements.txt && python app.py
 """
+import weakref
+import os
 import json
 import math
 import time
@@ -43,8 +45,8 @@ from native_engine import chroma_key_inplace, color_adjust_inplace, backend_stat
 from spellchecker import SpellChecker
 
 APP_VERSION = 'v' + VERSION
-APP_NEWS = ('New: clean recording with automatic speech alignment and presentation-style text export; '
-            'public release updates and a single portable launcher. Live WASD position updates are fixed.')
+APP_NEWS = ('New: parametric microphone EQ, RNNoise suppression and smooth gate controls; '
+            'draggable canvas text, improved mouth sensitivity controls and automatic session restore.')
 
 DICTIONARY_PATH = Path.home() / '.dynamic_teleprompter_dictionary.json'
 DICTIONARY_NAME_PATH = Path.home() / '.dynamic_teleprompter_dictionary_name.json'
@@ -769,12 +771,16 @@ class LayerCanvasPreview(QWidget):
     """Aspect-correct canvas preview. Drag selected layer to move it in canvas space."""
     moved = Signal(float, float)
 
+    @property
+    def main(self):
+        return self._main_ref()
+
     def __init__(self, main):
         super().__init__()
-        self.main = main
+        self._main_ref = weakref.ref(main)
         self.setMinimumSize(260, 180)
         self.setMouseTracking(True)
-        self.setToolTip('Drag here to move the selected media layer (including Live2D)')
+        self.setToolTip('Select a layer in the list, then drag here to move it, including Text Output')
         self.start = None
 
     def content_rect(self):
@@ -864,9 +870,13 @@ class VisualLayerEditor(QDialog):
                     self.camera_preview_label.setToolTip(f'Live view: Camera {camera_idx}')
 
 
+    @property
+    def main(self):
+        return self._main_ref()
+
     def __init__(self, main):
         super().__init__(main)
-        self.main = main
+        self._main_ref = weakref.ref(main)
         self.setWindowTitle('Visual Layer Editor — Dynamic Teleprompter')
         self.resize(950, 600)
         outer = QVBoxLayout(self)
@@ -883,7 +893,7 @@ class VisualLayerEditor(QDialog):
         for action_row in [
             [('Image…', self.add_image), ('Video…', self.add_video), ('Live2D…', self.add_live2d), ('Model Info', self.model_info), ('Idle Animation…', self.edit_idle_animation), ('Movement…', self.edit_movement)],
             [('Model Library…', self.open_model_library), ('Next Model', self.next_model)],
-            [('Rename', self.rename_layer), ('Duplicate', self.duplicate_layer), ('Remove', self.remove_layer), ('↑', lambda: self.move(-1)), ('↓', lambda: self.move(1))],
+            [('Rename', self.rename_layer), ('Duplicate', self.duplicate_layer), ('Remove', self.remove_layer), ('↑', self.move_up), ('↓', self.move_down)],
         ]:
             actions = QHBoxLayout()
             left.addLayout(actions)
@@ -1073,13 +1083,15 @@ class VisualLayerEditor(QDialog):
             ('blink_interval', 'Average blink interval (sec)', 1, 15, .5),
             ('breath_period', 'Breathing period (sec)', 1, 12, .5),
             ('breath_strength', 'Breath strength', 0, 1, .05),
-            ('lip_sensitivity', 'Mouth sensitivity', .2, 15, .1),
+            ('lip_sensitivity', 'Mouth sensitivity', 0, 100, 1),
             ('lip_threshold', 'Microphone noise floor', 0, .2, .005),
         ]:
             box = QDoubleSpinBox()
+            box.setObjectName(key)
             box.setRange(low, high)
             box.setSingleStep(step)
             box.setDecimals(3)
+            box.setKeyboardTracking(False)
             box.setValue(float(cfg[key]))
             form.addRow(title, box)
             controls[key] = box
@@ -1179,7 +1191,7 @@ class VisualLayerEditor(QDialog):
         if row < 0 or row >= len(self.main.media_layers):
             return
         layer = self.main.media_layers[row]
-        if layer.get('type') not in ('image', 'video', 'live2d') or layer.get('locked'):
+        if layer.get('type') not in ('image', 'video', 'live2d', 'text') or layer.get('locked'):
             return
         layer['x'] = max(-200, min(200, float(layer.get('x', 0)) + dx))
         layer['y'] = max(-200, min(200, float(layer.get('y', 0)) + dy))
@@ -1201,6 +1213,7 @@ class VisualLayerEditor(QDialog):
         if row < 0 or row >= len(self.main.media_layers): return
         layer = self.main.media_layers[row]
         editable = layer.get('type') in ('image','video','live2d')
+        positionable = editable or layer.get('type') == 'text'
         for widget, val in [(self.tracking, bool(layer.get('tracking', False))), (self.visible, bool(layer.get('visible', True))), (self.x, float(layer.get('x',0))),
                             (self.y,float(layer.get('y',0))), (self.scale,float(layer.get('scale',1))),
                             (self.opacity,int(layer.get('opacity',100))),
@@ -1216,7 +1229,7 @@ class VisualLayerEditor(QDialog):
             if isinstance(widget, QCheckBox): widget.setChecked(val)
             else: widget.setValue(val)
             widget.blockSignals(False)
-            widget.setEnabled(editable and (widget is self.locked or not layer.get('locked', False)))
+            widget.setEnabled((editable or (positionable and widget in (self.x, self.y, self.visible, self.locked))) and (widget is self.locked or not layer.get('locked', False)))
         self.tracking.setEnabled(layer.get('type') == 'live2d' and not layer.get('locked', False))
         self.key_color = QColor(layer.get('key_color', '#00ff00')).name()
         self.key_color_button.setText('Key color: ' + self.key_color.upper())
@@ -1226,8 +1239,14 @@ class VisualLayerEditor(QDialog):
         row = self.items.currentRow()
         if row < 0 or row >= len(self.main.media_layers): return
         layer = self.main.media_layers[row]
-        if layer.get('type') not in ('image','video','live2d'): return
         if layer.get('locked', False) and self.locked.isChecked(): return
+        if layer.get('type') == 'text':
+            layer.update(x=self.x.value(), y=self.y.value(), visible=self.visible.isChecked(), locked=self.locked.isChecked())
+            self.main.render()
+            self.refresh_items(row)
+            self.preview.update()
+            return
+        if layer.get('type') not in ('image','video','live2d'): return
         layer.update(tracking=self.tracking.isChecked(), visible=self.visible.isChecked(), x=self.x.value(), y=self.y.value(),
                      scale=self.scale.value(), opacity=self.opacity.value(),
                      brightness=self.brightness.value(), contrast=self.contrast.value(),
@@ -1351,6 +1370,12 @@ class VisualLayerEditor(QDialog):
         self.refresh_items(row)
         self.preview.update()
 
+    def move_up(self):
+        self.move(-1)
+
+    def move_down(self):
+        self.move(1)
+
     def move(self, direction):
         row = self.items.currentRow()
         other = row + direction
@@ -1367,12 +1392,14 @@ class CanvasScene(QWidget):
         super().__init__()
         self.setWindowTitle('Dynamic Teleprompter — Output')
         self.resize(850, 440)
-        self.layout = QVBoxLayout(self)
+        self.text_container = QWidget(self)
+        self.text_container.setGeometry(self.rect())
+        self.layout = QVBoxLayout(self.text_container)
         self.layout.setContentsMargins(24, 24, 24, 24)
         self.layout.setSpacing(12)
         self.labels = []
         for _ in range(3):
-            label = StyledOutputLabel('', self)
+            label = StyledOutputLabel('', self.text_container)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setWordWrap(False)
             label.setMinimumHeight(30)
@@ -1386,6 +1413,16 @@ class CanvasScene(QWidget):
         self._output_transparent = False
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.set_output(['', '', ''], {})
+
+    def position_text(self):
+        layer = next((v for v in self._media_layers if v.get('type') == 'text'), {})
+        self.text_container.setGeometry(round(self.width() * float(layer.get('x', 0)) / 100),
+            round(self.height() * float(layer.get('y', 0)) / 100), self.width(), self.height())
+        self.text_container.setVisible(layer.get('visible', True))
+
+    def resizeEvent(self, event):
+        self.position_text()
+        super().resizeEvent(event)
 
     def paintEvent(self, event):
         # Paint the full window, including the space between labels, on EVERY
@@ -1409,6 +1446,8 @@ class CanvasScene(QWidget):
         settings = dict(settings)
         old = self.current_settings
         self.current_settings = settings
+        self._media_layers = settings.get('media_layers', self._media_layers)
+        self.position_text()
         bg = QColor(settings.get('background', '#00FF00'))
         if not bg.isValid():
             bg = QColor('#00FF00')
@@ -1935,6 +1974,12 @@ class MainWindow(QMainWindow):
         self.load_settings()
         self.prepare_groups()
         self._saved_project_snapshot = self._project_snapshot()
+        self._session_last = None
+        self.restore_session()
+        self._session_timer = QTimer(self)
+        self._session_timer.setInterval(2000)
+        self._session_timer.timeout.connect(self.autosave_session)
+        self._session_timer.start()
         self.update_model_status()
         QTimer.singleShot(500, self.prompt_model_if_missing)
         self.out.show()
@@ -2238,6 +2283,10 @@ class MainWindow(QMainWindow):
         # Audio workers read an immutable snapshot, never QWidget state.
         return self._audio_live_settings
 
+    def edit_microphone_effects(self):
+        from mic_ui import MicrophoneEffectsDialog
+        MicrophoneEffectsDialog(self).exec()
+
     def _audio_chain_snapshot(self):
         chain = []
         for i in range(self.audio_chain.count()):
@@ -2373,7 +2422,7 @@ class MainWindow(QMainWindow):
     def _refresh_vst3_status(self):
         errors = plugin_errors()
         if errors:
-            self.vst3_status.setText('VST3 bypassed due to error: ' + '; '.join(
+            self.vst3_status.setText('Audio effects bypassed due to error: ' + '; '.join(
                 Path(k).name + ': ' + v for k, v in errors.items())[:400])
         elif vst3_backend_available():
             self.vst3_status.setText('VST3 host available (experimental). Third-party plugins run in an isolated process (experimental); failed plugins are bypassed.')
@@ -2859,6 +2908,9 @@ class MainWindow(QMainWindow):
         self.audio_chain.setMaximumHeight(160)
         self.audio_chain.setToolTip('Top to bottom processing order. Uncheck any effect to bypass it.')
         record_form.addRow('Mic effects chain:', self.audio_chain)
+        edit_mic = QPushButton('Microphone EQ / Noise Cleanup…')
+        edit_mic.clicked.connect(self.edit_microphone_effects)
+        record_form.addRow('', edit_mic)
         chain_buttons = QWidget()
         chain_buttons_row = QHBoxLayout(chain_buttons)
         chain_buttons_row.setContentsMargins(0, 0, 0, 0)
@@ -2880,7 +2932,7 @@ class MainWindow(QMainWindow):
         record_form.addRow('', chain_buttons)
         self.audio_chain.itemChanged.connect(self._update_live_record_settings)
         self._set_audio_chain(DEFAULT_CHAIN)
-        self.audio_processing_status = QLabel('Built-in Gain, Noise Gate and Soft Clip can be bypassed or reordered. '
+        self.audio_processing_status = QLabel('Built-in EQ, Noise Suppression, Gain, smooth Noise Gate and Soft Clip can be bypassed or reordered. '
             'Live monitoring and recording share this chain. VST3 plugins are experimental; generic parameters can be edited. Native plugin UIs and VST2 are not supported.')
         self.audio_processing_status.setWordWrap(True)
         record_form.addRow('', self.audio_processing_status)
@@ -4344,22 +4396,7 @@ class MainWindow(QMainWindow):
                 raise ValueError('This is not a Dynamic Teleprompter project file.')
             if not isinstance(data.get('settings'), dict) or not isinstance(data.get('script'), str):
                 raise ValueError('Project is missing valid script or settings data.')
-            self.stop_listening()
-            self.apply_settings_values(data['settings'])
-            self.visual_global = dict(data.get('visual_global') or {})
-            self.slide_visuals = {int(key): dict(value) for key, value in
-                                  (data.get('slide_visuals') or {}).items()}
-            self.global_effect_exclusions = {
-                int(n) for n in (data.get('global_effect_exclusions') or [])
-                if isinstance(n, int) and n > 0
-            }
-            self.animation_global = {**ANIMATION_DEFAULT, **dict(data.get('animation_global') or {})}
-            self.animation_slides = {int(k): dict(v) for k, v in (data.get('animation_slides') or {}).items()}
-            self.script.setPlainText(data['script'])
-            startup = data.get('startup') or {}
-            self.start_first_slide.setChecked(bool(startup.get('first_slide', True)))
-            self.start_voice_following.setChecked(bool(startup.get('voice_following', True)))
-            self.prepare_groups()
+            self.apply_project_payload(data)
             self.project_path = path
             self.project_label.setText(path.name)
             self.effect_status.setText(f'Loaded effects from {path.name}. Use Apply to edit them.')
@@ -4367,6 +4404,74 @@ class MainWindow(QMainWindow):
             self._saved_project_snapshot = self._project_snapshot()
         except Exception as exc:
             QMessageBox.warning(self, 'Project open error', str(exc))
+
+    def apply_project_payload(self, data):
+        self.stop_listening()
+        self.apply_settings_values(data['settings'])
+        self.visual_global = dict(data.get('visual_global') or {})
+        self.slide_visuals = {int(key): dict(value) for key, value in
+                              (data.get('slide_visuals') or {}).items()}
+        self.global_effect_exclusions = {
+            int(n) for n in (data.get('global_effect_exclusions') or [])
+            if isinstance(n, int) and n > 0
+        }
+        self.animation_global = {**ANIMATION_DEFAULT, **dict(data.get('animation_global') or {})}
+        self.animation_slides = {int(k): dict(v) for k, v in (data.get('animation_slides') or {}).items()}
+        self.script.setPlainText(data['script'])
+        startup = data.get('startup') or {}
+        self.start_first_slide.setChecked(bool(startup.get('first_slide', True)))
+        self.start_voice_following.setChecked(bool(startup.get('voice_following', True)))
+        self.prepare_groups()
+
+    def session_path(self):
+        base = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'DynamicTeleprompter'
+        return base / 'last-session.json'
+
+    def autosave_session(self):
+        if os.environ.get('COSMERE_CAM_NO_SESSION'):
+            return
+        try:
+            from updates import atomic_json
+            payload = dict(project=self._project_payload(),
+                project_path=str(self.project_path) if self.project_path else '',
+                saved_snapshot=getattr(self, '_saved_project_snapshot', None),
+                index=self.index, awaiting_first=self.awaiting_first,
+                cursor=self.script.textCursor().position())
+            serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            if serialized == self._session_last:
+                return
+            path = self.session_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json(path, payload)
+            self._session_last = serialized
+        except Exception as exc:
+            self.project_label.setToolTip('Session autosave could not complete: ' + str(exc))
+
+    def restore_session(self):
+        if os.environ.get('COSMERE_CAM_NO_SESSION'):
+            return
+        try:
+            path = self.session_path()
+            if not path.exists():
+                return
+            data = json.loads(path.read_text(encoding='utf-8'))
+            project = data['project']
+            if project.get('format') != 'DynamicTeleprompterProject':
+                raise ValueError('Invalid saved session')
+            self.apply_project_payload(project)
+            self.project_path = Path(data['project_path']) if data.get('project_path') else None
+            self.project_label.setText(self.project_path.name if self.project_path else 'Restored working session')
+            self._saved_project_snapshot = data.get('saved_snapshot') or self._project_snapshot()
+            self.index = max(0, min(len(self.groups), int(data.get('index', 0))))
+            self.awaiting_first = bool(data.get('awaiting_first', True))
+            self.history = self.groups[:self.index]
+            self.sync_voice_cursor()
+            cursor = self.script.textCursor()
+            cursor.setPosition(max(0, min(len(self.script.toPlainText()), int(data.get('cursor', 0)))))
+            self.script.setTextCursor(cursor)
+            self.render()
+        except Exception as exc:
+            self.project_label.setToolTip('Previous session could not be restored: ' + str(exc))
 
     def apply_settings_values(self, values):
         # Signal blocking prevents reconstructing pages with half-loaded settings.
@@ -4499,6 +4604,8 @@ class MainWindow(QMainWindow):
                                     'Please wait until the recording finishes saving before exiting.')
             event.ignore()
             return
+        self.autosave_session()
+        self._session_timer.stop()
         self.stop_animation_test()
         if self.animation_test_window is not None:
             self.animation_test_window.close()
@@ -4513,6 +4620,12 @@ class MainWindow(QMainWindow):
         # The application outlives this window during Qt teardown. Remove the
         # Python filter before child layouts are destroyed (notably on 3.13).
         QApplication.instance().removeEventFilter(self)
+        self.reader.scroll_timer.stop()
+        self.reader.view.setExtraSelections([])
+        self.script.proofreader.setDocument(None)
+        self.script.proofreader.deleteLater()
+        for label in self.out.labels:
+            label.cancel_motion()
         self.out.close()
         self.reader.close()
         super().closeEvent(event)

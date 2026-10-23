@@ -49,7 +49,7 @@ class TextTimeline:
             for slot, (index, leaving) in enumerate(draw):
                 cue, scene = self.cues[index], self.scenes[slot]
                 settings = dict(cue['settings'], transparent=True, background_image='', instant=True, mode='Script')
-                settings['media_layers'] = []
+                settings['media_layers'] = [dict(v) for v in settings.get('media_layers', []) if v.get('type') == 'text']
                 text, timing = cue['text'], list(cue['words'])
                 behavior = settings.get('behavior')
                 if behavior in ('Stack', 'Scroll'):

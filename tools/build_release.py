@@ -32,6 +32,10 @@ def main():
     native = SOURCE / 'native' / 'dt_engine.dll'
     if native.exists():
         command += ['--add-binary', str(native) + ';native']
+    rnnoise = SOURCE / 'native' / 'rnnoise.dll'
+    if not rnnoise.exists():
+        raise RuntimeError('Build RNNoise before packaging microphone cleanup')
+    command += ['--add-binary', str(rnnoise) + ';native']
     command += [str(SOURCE / 'desktop_entry.py')]
     subprocess.run(command, check=True)
     portable = build / 'portable'

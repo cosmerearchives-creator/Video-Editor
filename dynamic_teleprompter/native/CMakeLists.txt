@@ -1,5 +1,30 @@
 cmake_minimum_required(VERSION 3.16)
-project(dynamic_teleprompter_native LANGUAGES CXX)
+project(dynamic_teleprompter_native LANGUAGES C CXX)
+include(FetchContent)
+FetchContent_Declare(rnnoise_source
+    URL https://codeload.github.com/xiph/rnnoise/zip/refs/tags/v0.1
+    URL_HASH SHA256=b595e1e17a224bd915a1c68da4a985a0c36a4dd14ea98cab9a57a944f8c53994)
+FetchContent_MakeAvailable(rnnoise_source)
+set(RN ${rnnoise_source_SOURCE_DIR})
+set(RN_PORTABLE_SOURCES)
+foreach(NAME pitch celt_lpc)
+    # MSVC has no C99 variable-length arrays. Use equivalent stack allocation.
+    file(READ ${RN}/src/${NAME}.c RN_CODE)
+    if(MSVC)
+        string(REGEX REPLACE "(opus_val(16|32)) ([a-zA-Z0-9_]+)\\[([^]]+)\\];"
+            "\\1 *\\3 = (\\1 *)_alloca(sizeof(\\1)*(\\4));" RN_CODE "${RN_CODE}")
+        file(WRITE ${CMAKE_BINARY_DIR}/${NAME}.c "#include <malloc.h>\n${RN_CODE}")
+        list(APPEND RN_PORTABLE_SOURCES ${CMAKE_BINARY_DIR}/${NAME}.c)
+    else()
+        list(APPEND RN_PORTABLE_SOURCES ${RN}/src/${NAME}.c)
+    endif()
+endforeach()
+add_library(rnnoise SHARED ${RN}/src/denoise.c ${RN}/src/rnn.c ${RN}/src/rnn_data.c
+    ${RN}/src/kiss_fft.c ${RN_PORTABLE_SOURCES})
+target_include_directories(rnnoise PRIVATE ${RN}/include ${RN}/src)
+target_compile_definitions(rnnoise PRIVATE RNNOISE_BUILD DLL_EXPORT _USE_MATH_DEFINES)
+set_target_properties(rnnoise PROPERTIES PREFIX "")
+configure_file(${RN}/COPYING ${CMAKE_BINARY_DIR}/RNNoise-LICENSE.txt COPYONLY)
 add_library(dt_engine SHARED engine.cpp)
 target_compile_features(dt_engine PRIVATE cxx_std_17)
 set_target_properties(dt_engine PROPERTIES PREFIX "" OUTPUT_NAME "dt_engine")

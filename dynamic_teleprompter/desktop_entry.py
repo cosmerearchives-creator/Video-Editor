@@ -17,6 +17,7 @@ def main():
             folder.mkdir(parents=True, exist_ok=True)
             sys.stderr = (folder / 'application.log').open('a', encoding='utf-8')
     if any(flag in sys.argv for flag in ('--smoke-test', '--smoke-align', '--smoke-window')):
+        os.environ['COSMERE_CAM_NO_SESSION'] = '1'
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         try:
             from smoke import run, run_alignment, run_window

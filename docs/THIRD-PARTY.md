@@ -30,3 +30,9 @@ Other primary upstream projects:
 The accompanying dependency-versions.txt identifies the exact build environment.
 Speech model weights are downloaded from Whisper's upstream model distribution
 on first use and retained in the user's shared runtime cache, not in the ZIP.
+
+RNNoise v0.1 (Xiph.Org/Mozilla/Jean-Marc Valin) is bundled for local speech
+suppression under its BSD-style license, included as RNNoise-LICENSE.txt.
+The checksum-pinned upstream source is fetched during the native build.
+MSVC builds replace C99 variable-length arrays with equivalent stack allocation.
+Source: https://github.com/xiph/rnnoise/tree/v0.1
