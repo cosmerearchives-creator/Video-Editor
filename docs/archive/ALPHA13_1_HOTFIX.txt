@@ -1,0 +1,12 @@
+NOTE: Setup instructions in this older release note have been superseded by ALPHA13_2_HOTFIX.txt.
+
+Dynamic Teleprompter v0.5.0-alpha13.1 — Invisible Live2D layer hotfix
+
+- Restored alpha12's static model pose as the default when camera tracking is not active.
+- Face parameter initialization failures can no longer suppress otherwise valid static model rendering.
+- Added visible Live2D rendering errors to the Visual Layer Editor's Camera status line when a model is selected. Errors are also printed in the launcher console.
+- Live2D Core DLL is NOT bundled. If the model appears in the list but not on canvas, run setup_live2d_sdk_windows.bat again for THIS extracted release folder. Each new extracted build needs its own SDK DLL unless you copy it from your previously configured build.
+- Keep model's .model3.json, .moc3 and textures together, with their original directory layout.
+- Tracking remains experimental: webcam face position drives basic model angles, not true head pose / expressions.
+
+Validation: Python compilation and ZIP integrity. Windows render/recording test remains required.

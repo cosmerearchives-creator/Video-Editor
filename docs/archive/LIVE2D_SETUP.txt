@@ -1,0 +1,28 @@
+NOTE: Setup instructions in this older release note have been superseded by ALPHA13_2_HOTFIX.txt.
+
+Dynamic Teleprompter v0.5.0-alpha11: Experimental Live2D static mesh display
+============================================================================
+
+1. Obtain Cubism SDK for Native from https://www.live2d.com/en/sdk/download/native/
+   after reviewing and accepting the applicable Live2D terms.
+2. Extract this Dynamic Teleprompter release.
+3. Run setup_live2d_sdk_windows.bat and enter the FULL PATH to your
+   CubismSdkForNative-5-r.5.zip file. This extracts ONLY the official
+   64-bit Live2DCubismCore.dll into the local live2d_sdk folder.
+4. Start the application normally, open the Visual Layer Editor, choose
+   Live2D..., and select your model's .model3.json manifest. Keep the
+   .moc3 and all textures in the same folder structure.
+5. Export a PNG to see whether the initial static pose appears in the canvas.
+
+THIS IS AN EXPERIMENTAL MESH VIEWER, NOT THE FULL CUBISM RENDERER.
+- Renders the initial pose using the real Cubism Core geometry and textures.
+- Does not currently evaluate motions, expressions or physics, nor track faces.
+- Cubism clipping masks, special blend modes, offscreen rendering, color
+  corrections and advanced shaders are not supported. Some models will look
+  visibly incorrect, especially models with masked materials.
+- Drawing uncached meshes on first import may be slow; subsequent frames use
+  a cached static pose for recording and preview.
+- If the Core DLL is missing, the model is omitted and a diagnostic is printed
+  to the terminal. Image/video and text layers continue to operate.
+- The Live2D SDK files (including the DLL) are not redistributed in this ZIP.
+- Do not share your copied SDK DLL unless you have rights to distribute it.

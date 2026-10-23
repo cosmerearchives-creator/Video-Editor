@@ -1,0 +1,40 @@
+COSMERE CAM — START HERE
+
+1. Extract the entire Windows ZIP to a folder you can write to.
+2. Double-click "Cosmere Cam.exe". This is the only application launcher.
+3. Keep the app and docs folders beside it. Do not run files inside app.
+
+Python and the normal app dependencies are included in the Windows release.
+FFmpeg is included. Licensed Cubism Core and your own Live2D models are separate;
+the existing shared runtime remains in use when upgrading.
+
+UPDATES
+The app checks public GitHub releases in the background. Help > Check for
+Updates lets you check manually. An update asks before installing and restarting,
+verifies its download, and preserves the previous version for rollback.
+Finish recording/exporting before updating. Help also has a rollback action.
+
+TEXT AFTER RECORDING
+In recording settings, leave "Preview text only; align recorded speech..." on.
+Use Script output mode and enable microphone recording. Text remains in the
+preview but is not burned into the clean recording. At Stop, the app aligns
+your script to the original voice automatically, using a local speech model.
+First use downloads about 145 MB of model weights. Your audio is not uploaded.
+
+Review flagged words and adjust start/end seconds as needed. Uncheck Include
+for skipped words and confirm the affected rows Reviewed. Export adds text using
+the presentation styles/animation settings saved at recording start. The clean
+MP4 and its .assets folder are retained so you can revise/export again.
+
+You can reopen a recording through File > Review / Align Recorded Presentation.
+Select recording.session.json in that recording's .assets folder.
+
+The alignment model is English by default. Names, repeated takes, skipped text
+and unusual speech can require corrections. Live timing is never used as a
+substitute when automatic alignment fails.
+
+This is an alpha release. A Windows signing certificate is not configured;
+Windows may show a publisher/reputation prompt on the first launch.
+
+Source, releases and update downloads:
+https://github.com/cosmerearchives-creator/Video-Editor

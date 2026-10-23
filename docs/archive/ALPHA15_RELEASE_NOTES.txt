@@ -1,0 +1,29 @@
+Dynamic Teleprompter v0.5.0-alpha15 — Saved Live2D model switching
+
+NEW
+- Application banner, About panel and title bar show the current release (v0.5.0-alpha15).
+- Output -> Canvas & Layers includes Open Live2D Model Library and Next Saved Model.
+- Visual Layer Editor includes Model Library and Next Model actions on their own row.
+- Add a model from its .model3.json file to the saved library; presets persist in Windows user settings across projects.
+- Save Current Model copies the currently selected Live2D layer to the model library, including idle animation settings.
+- Switch to Selected replaces the currently selected Live2D layer (or first Live2D layer) without adding duplicate layers.
+- Character's X/Y position, scale, opacity and position in the layer stack are retained on switch.
+- Each saved character retains independent idle animation settings when switched away from and back to.
+- Ctrl+Shift+M cycles to the next saved model; Next Model buttons also available.
+
+TEST
+1. Start the app, inspect the updated news and About text.
+2. Add Arc2 with the Visual Layer Editor. Select it and choose Model Library -> Save Current Model.
+3. Add a second compatible .model3.json manifest via Model Library -> Add Model.
+4. Select and activate the second model. Confirm no additional Live2D layer is created; verify position and scale remain.
+5. Change the second model's Idle Animation settings, switch back to Arc2, then switch forward again to verify individual settings.
+6. Close and restart app; verify saved model library persists.
+7. Use Ctrl+Shift+M to cycle models; record a short clip and check rendered model.
+
+LIMITATIONS
+- Cubism Core is still required; startup/setup from previous releases is unchanged.
+- Swaps are instant and may briefly reconstruct CPU mesh textures; no crossfade/preloading yet.
+- Missing saved model paths are marked [missing] and cannot be activated until restored.
+- External Live2D files are referenced by path; model data is not embedded in the project.
+- Keyboard WASD movement and 2.5D perspective scaling are planned for later releases.
+- Windows GUI and user hardware were not available for end-to-end verification here.

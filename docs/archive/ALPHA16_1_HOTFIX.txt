@@ -1,0 +1,23 @@
+Dynamic Teleprompter v0.5.0-alpha16.1 — WASD responsiveness hotfix
+
+Problem: Head-turn animation invalidates the entire Cubism CPU mesh cache.
+The expensive repaint runs on the Qt GUI thread, blocking input processing.
+When the GUI eventually resumes, position appears to teleport.
+
+Changes:
+- Render Live2D poses to a capped 640-pixel-long-edge offscreen buffer,
+  then scale the cached image onto the native-resolution composition canvas.
+- Limit expensive pose updates and adapt the interval when mesh painting is slow.
+- Keep cheap position and perspective transformations separate from pose rasterization.
+- Clamp movement time-step to 33 ms, preventing a single delayed frame from
+  accumulating a large change in character position.
+
+Known limits:
+- Face/head/idle pose changes may appear at a lower FPS on complex models.
+- CPU triangle renderer still runs on the UI thread; longer-term fix is a
+  native GPU Cubism renderer and independent movement/recording clocks.
+- Windows GUI and Arc2 performance are not verified in this environment.
+
+Test: Move A/D, release, reverse direction; W/S depth movement; record short
+video; verify there is no large jump following pauses. If still laggy, send
+canvas frame-time diagnostics and whether the output or editor window is visible.

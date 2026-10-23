@@ -1,0 +1,25 @@
+v0.5.0-alpha14 — Camera-free Live2D animation
+
+Changes:
+- Live2D Idle Animation dialog: randomized blink timing, breathing, microphone audio-reactive mouth movement.
+- New models enable idle animation by default; imported settings stored per-layer in project.
+- All camera UI removed from Visual Layer Editor; existing webcam backend retained.
+- Microphone level uses same raw audio path as recorder when recording.
+- Audio monitor and lip sync can share a microphone stream during monitoring.
+- Direct Live2D mesh updates capped at 15 updates/sec for CPU-renderer performance.
+
+How to test:
+1. Open Visual Layer Editor, import Arc2 or choose existing Live2D layer.
+2. Select Idle Animation, change blink/breath/lip values, save.
+3. Watch model blink/breathe. Speak into the default microphone to test mouth.
+4. Record a clip with microphone enabled; check recorded lip movement.
+5. Save and reload the project to verify model settings.
+
+Limitations:
+- Cubism parameter IDs must match ParamEyeLOpen, ParamEyeROpen, ParamBreath, ParamMouthOpenY. Models with other parameter IDs will require mapping UI.
+- Volume-based lip sync is not phoneme lip sync.
+- The experimental Qt CPU mesh renderer limits dynamic pose updates to 15 Hz.
+- Imported models may have no configured breath deformation.
+- Voice recognition and other programs competing for microphone access may cause open errors.
+- Model physics, dedicated Cubism official renderer and camera tracking remain unfinished.
+- Windows GUI and microphone hardware behavior are not verified here.
