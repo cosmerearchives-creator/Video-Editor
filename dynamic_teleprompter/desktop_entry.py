@@ -31,7 +31,9 @@ def main():
             if '--smoke-report' in sys.argv:
                 path = Path(sys.argv[sys.argv.index('--smoke-report') + 1])
                 path.write_text(traceback.format_exc(), encoding='utf-8')
-            raise
+            # An unhandled exception in a windowed frozen executable opens an
+            # error dialog and blocks headless CI. Reports carry the traceback.
+            raise SystemExit(1)
     from app import main as launch
     launch()
 

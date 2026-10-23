@@ -70,6 +70,13 @@ jobs:
       - name: Build and verify portable executable
         run: python tools/build_release.py
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-build-diagnostics
+          path: |
+            build/*.json
+            build/application/CosmereCam/warn-*.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: Cosmere-Cam-Windows-release
           path: dist/*

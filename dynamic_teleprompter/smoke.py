@@ -34,8 +34,11 @@ def run():
         command = ([sys.executable] if getattr(sys, 'frozen', False) else
                    [sys.executable, str(Path(__file__).with_name('desktop_entry.py'))])
         env = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT='1')
-        subprocess.run([*command, '--smoke-window', '--smoke-report', str(window_report)],
-                       check=True, timeout=90, env=env)
+        child = subprocess.run([*command, '--smoke-window', '--smoke-report', str(window_report)],
+                               timeout=90, env=env)
+        if child.returncode:
+            details = window_report.read_text(encoding='utf-8') if window_report.exists() else 'No window report was written'
+            raise RuntimeError('Packaged control window failed: ' + details)
         assert json.loads(window_report.read_text(encoding='utf-8'))['success']
         background, foreground, clean = root / 'background.mp4', root / 'foreground.mkv', root / 'clean.mp4'
         subprocess.run([ffmpeg, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:r=10:d=1',

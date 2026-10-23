@@ -2,7 +2,7 @@
 import hashlib
 import importlib.metadata
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -59,9 +59,11 @@ def main():
             if '.dist-info/' in text and any(token in Path(text).name.casefold() for token in ('license', 'copying', 'notice')):
                 origin = Path(distribution.locate_file(file))
                 if origin.is_file():
-                    directory = licenses / name
-                    directory.mkdir(exist_ok=True)
-                    shutil.copy2(origin, directory / origin.name)
+                    parts = PurePosixPath(text).parts
+                    index = next(i for i, part in enumerate(parts) if part.endswith('.dist-info'))
+                    target_notice = licenses / name / Path(*parts[index + 1:])
+                    target_notice.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(origin, target_notice)
     (portable / 'docs' / 'dependency-versions.txt').write_text('\n'.join(sorted(inventory)), encoding='utf-8')
     import imageio_ffmpeg
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
@@ -70,16 +72,26 @@ def main():
     (portable / 'docs' / 'ffmpeg-build-and-license.txt').write_text(details, encoding='utf-8')
     # Verify the actual frozen application, including Qt image export and FFmpeg.
     report = build / 'frozen-smoke.json'
-    subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-test', '--smoke-report', str(report)],
-                   check=True, timeout=180)
+    try:
+        subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-test', '--smoke-report', str(report)],
+                       check=True, timeout=180)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        if report.exists():
+            print(report.read_text(encoding='utf-8'), flush=True)
+        raise
     if not json.loads(report.read_text(encoding='utf-8')).get('success'):
         raise RuntimeError('Frozen application smoke test failed')
     voice = build / 'speech-test.wav'
     subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
                     str(ROOT / 'tools' / 'make_test_voice.ps1'), '-Destination', str(voice)], check=True)
     speech_report = build / 'frozen-alignment.json'
-    subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-align', str(voice),
-                    '--smoke-report', str(speech_report)], check=True, timeout=600)
+    try:
+        subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-align', str(voice),
+                        '--smoke-report', str(speech_report)], check=True, timeout=600)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        if speech_report.exists():
+            print(speech_report.read_text(encoding='utf-8'), flush=True)
+        raise
     if not json.loads(speech_report.read_text(encoding='utf-8')).get('success'):
         raise RuntimeError('Frozen speech alignment test failed')
     artifacts = ROOT / 'dist'
