@@ -24,7 +24,7 @@ def main():
     command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed',
         '--onedir', '--name', 'CosmereCam', '--distpath', str(output),
         '--workpath', str(build / 'application'), '--specpath', str(build), '--paths', str(SOURCE)]
-    for package in ('stable_whisper', 'whisper', 'tiktoken', 'imageio_ffmpeg', 'vosk', 'cv2', 'pedalboard', '_sounddevice_data'):
+    for package in ('spellchecker', 'stable_whisper', 'whisper', 'tiktoken', 'imageio_ffmpeg', 'vosk', 'cv2', 'pedalboard', '_sounddevice_data'):
         command += ['--collect-all', package]
     command += ['--hidden-import', 'tiktoken_ext.openai_public', '--copy-metadata', 'stable-ts',
                 '--copy-metadata', 'openai-whisper', '--exclude-module', 'matplotlib',
