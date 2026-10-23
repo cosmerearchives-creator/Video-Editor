@@ -31,7 +31,7 @@ the post-recording option to use the original live-text recording workflow.
 
 ## Microphone EQ, cleanup and session restore
 
-Recording → Microphone EQ / Noise Cleanup provides six parametric EQ bands and
+Recording → Microphone EQ / Noise Cleanup provides expandable parametric EQ bands (up to 32) and
 RNNoise speech suppression for fans and keyboard clicks. Enable the desired
 processor, Apply, and use microphone monitoring with headphones to preview.
 A smooth gate has configurable attack/release. Filters also process recordings;
@@ -42,6 +42,22 @@ Select Text Output in Visual Layer Editor, then drag the preview or edit X/Y.
 Mouth sensitivity defaults to 15 and supports typed values 0–100 with steps of 1.
 The last working session restores automatically on startup. Autosave runs every
 two seconds and on close; named project files remain separate explicit saves.
+
+## Final v0.6.00 review workflow
+
+The alignment screen previews the final text using saved animations, styles,
+position and foreground/background layer order. Show text overlay toggles it;
+word selection and seeking update the preview using your timing edits. Playback
+shows seconds to three decimal places. Invalid timings are omitted from preview
+until corrected; the export still requires valid, reviewed words.
+
+The default review queue hides words once reviewed with valid timing (or a
+confirmed skip). Show all words brings completed words back for editing. Save
+Timing Edits retains every word, including the hidden rows.
+
+Start/Stop Recording is available in Script Playback and the separate Reader,
+with a shared recording indicator, elapsed time and finalization state.
+The EQ editor has Add Band and per-band Remove controls; all bands are saved.
 
 ## Development
 
@@ -59,13 +75,13 @@ python desktop_entry.py --smoke-test --smoke-report ../smoke-source.json
 
 python tools/build_release.py builds the Windows portable package and tests the
 actual frozen executable before creating a ZIP. The GitHub workflow tests source
-on pull requests and publishes a versioned alpha release after a verified main
+on pull requests and publishes a versioned release after a verified main
 build. Never overwrite a published version; bump release_info.VERSION first.
 
 Proprietary SDK binaries, models, plugins, credentials and user recordings do not
 belong in source control. Existing features include voice following, recording,
 visual layers, Live2D idle animation/movement, camera tracking and experimental
-isolated VST3 effects. This unsigned alpha build requires normal review,
+isolated VST3 effects. This unsigned Windows build requires normal review,
 particularly for skipped/repeated or unusual speech.
 
 The alignment adapter uses [stable-ts](https://github.com/jianfch/stable-ts) and

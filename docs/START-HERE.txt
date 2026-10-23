@@ -33,14 +33,14 @@ The alignment model is English by default. Names, repeated takes, skipped text
 and unusual speech can require corrections. Live timing is never used as a
 substitute when automatic alignment fails.
 
-This is an alpha release. A Windows signing certificate is not configured;
+This is the Final v0.6.00 release. A Windows signing certificate is not configured;
 Windows may show a publisher/reputation prompt on the first launch.
 
 Source, releases and update downloads:
 https://github.com/cosmerearchives-creator/Video-Editor
 
 MICROPHONE EQ AND CLEANUP
-Recording > Microphone EQ / Noise Cleanup opens the six-band EQ and RNNoise
+Recording > Microphone EQ / Noise Cleanup opens the expandable EQ and RNNoise
 controls. Enable EQ/suppression and Apply. Use the microphone monitor with
 headphones to hear changes. Suppression strength defaults to 80% when enabled;
 lower it if speech sounds processed. Fan noise and keyboard clicks can be
@@ -53,3 +53,16 @@ files. Recording and microphone monitoring never restart automatically.
 
 In Visual Layer Editor, select Text Output and drag the preview to move text.
 Mouth sensitivity now defaults to 15 (range 0–100, step 1, decimals accepted).
+
+FINAL v0.6.00 REVIEW IMPROVEMENTS
+The review player shows presentation text with its saved styles, animations,
+position and layer order. Toggle Show text overlay to compare the clean video.
+The timestamp is in seconds to three decimals, matching the timing fields.
+Reviewed words leave the queue when timing is valid; Show all words restores
+completed rows to the view. Save Timing Edits retains the full alignment data.
+Words with invalid timing remain visible and must be corrected or confirmed
+as skipped before export. Preview omits invalid timings until they are fixed.
+
+Start/Stop Recording controls are in Script Playback and the separate Reader.
+They operate the same recorder, with elapsed time and finalization status.
+Use Add Band / Remove in the EQ editor (up to 32 bands, saved with your project).

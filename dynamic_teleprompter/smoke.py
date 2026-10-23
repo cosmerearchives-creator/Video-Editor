@@ -101,6 +101,8 @@ def run():
             center = pixels[(90 * 320 + 160) * 3:(90 * 320 + 160) * 3 + 3]
             assert center[0] > 170 and center[2] < 100, 'Foreground must remain above text'
             assert (root / 'final.mp4').stat().st_size > 1000
+            from review_smoke import run_review
+            run_review(root, session, words, ffmpeg, app, CanvasScene)
         finally:
             timeline.close()
             if not export.finished:
@@ -109,7 +111,10 @@ def run():
     result = {'success': True, 'version': VERSION, 'checks': [
         'real control window startup', 'bundled RNNoise processes audio', 'parametric EQ processes audio', 'Qt presentation text painter', 'bundled FFmpeg', 'alpha foreground capture',
         'deterministic aligned overlay frames', 'H.264/AAC final export',
-        'foreground preserved above text', 'speech/camera/VST dependencies import']}
+        'foreground preserved above text', 'review queue and millisecond timestamp',
+        'live aligned text preview with source-layer order and seeking',
+        'reader/script recording controls', 'add/remove EQ bands beyond twelve',
+        'speech/camera/VST dependencies import']}
     if '--smoke-report' in sys.argv:
         Path(sys.argv[sys.argv.index('--smoke-report') + 1]).write_text(json.dumps(result, indent=2), encoding='utf-8')
     else:
@@ -193,7 +198,15 @@ def run_window():
             effects.eq_enabled.setChecked(True)
             effects.suppress_enabled.setChecked(True)
             effects.rows[1][3].setValue(3)
+            for _ in range(9):
+                effects.add_band()
+            effects.rows[-1][2].setValue(2700)
             effects.apply()
+            eq = next(e for e in window._audio_chain_snapshot() if e['type']=='eq')
+            assert len(eq['bands']) == 15 and eq['bands'][-1]['frequency'] == 2700
+            effects.remove_buttons[6].click()
+            effects.apply()
+            assert len(next(e for e in window._audio_chain_snapshot() if e['type']=='eq')['bands']) == 14
             assert next(e for e in window._audio_chain_snapshot() if e['type']=='eq')['bands'][1]['gain'] == 3
             effects.reject()
             effects.deleteLater()
@@ -211,7 +224,43 @@ def run_window():
             editor.close()
             editor.deleteLater()
             window.layer_editor = None
-            stage('text dragging, typed mouth sensitivity, EQ editor and session restore verified')
+            # Exercise reader Start -> script Stop through the actual shared handlers.
+            class ProbeRecorder:
+                def __init__(self, path, *args, **kwargs):
+                    self.path = path
+                    self.stopping = self.finished = False
+                    self.session = None
+                    self.error = None
+                    self.frame_count, self.late_frames = 1, 0
+                    self.report_path = root / 'recording.diagnostics.json'
+                def start(self):
+                    self.started = True
+                def frames_due(self):
+                    return 0
+                def elapsed(self):
+                    return 1.234
+                def finish_async(self):
+                    self.stopping = True
+                def abort(self):
+                    pass
+            window.record_dir = str(root / 'recordings')
+            with patch.object(application, 'CanvasRecorder', ProbeRecorder), \
+                    patch.object(QMessageBox, 'information', lambda *args, **kwargs: None):
+                window.reader.record_controls.toggle.click()
+                assert window.recorder is not None and window.recorder.started
+                window._sync_record_controls()
+                assert window.reader.record_controls.indicator.text() == '● REC 1.234 s'
+                assert 'Stop' in window.script_record_controls.toggle.text()
+                window.script_record_controls.toggle.click()
+                window._sync_record_controls()
+                assert window.recorder.stopping
+                assert not window.reader.record_controls.toggle.isEnabled()
+                window.recorder.finished = True
+                window._record_finished()
+                window._sync_record_controls()
+                assert window.recorder is None
+                assert 'Start' in window.reader.record_controls.toggle.text()
+            stage('text editing, expandable EQ, session restore and synchronized recording controls verified')
             assert window.record_post.isChecked() and window.updater is not None
             window.updater.automatic.setChecked(False)
             window.show()
