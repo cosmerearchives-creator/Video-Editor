@@ -4510,6 +4510,9 @@ class MainWindow(QMainWindow):
         lip_microphone.stop()
         stop_tracking()
         VIDEO_FRAMES.shutdown()
+        # The application outlives this window during Qt teardown. Remove the
+        # Python filter before child layouts are destroyed (notably on 3.13).
+        QApplication.instance().removeEventFilter(self)
         self.out.close()
         self.reader.close()
         super().closeEvent(event)
@@ -4531,3 +4534,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
