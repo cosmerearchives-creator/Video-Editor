@@ -78,5 +78,6 @@ jobs:
           $tag = "v$version"
           $existing = gh release view $tag --json tagName 2>$null
           if ($LASTEXITCODE -eq 0) { throw 'This version is already published. Bump VERSION before another release.' }
-          gh release create $tag dist/*.zip dist/SHA256SUMS.txt dist/frozen-smoke.json dist/frozen-alignment.json --target $env:GITHUB_SHA --title "Cosmere Cam $tag" --notes-file docs/RELEASE-alpha17.md --prerelease
+          $assets = @(Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName)
+          gh release create $tag @assets --target $env:GITHUB_SHA --title "Cosmere Cam $tag" --notes-file docs/RELEASE-alpha17.md --prerelease
           if ($LASTEXITCODE -ne 0) { throw 'Publishing the release failed' }

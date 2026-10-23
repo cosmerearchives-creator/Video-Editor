@@ -10,7 +10,10 @@ import time
 def run():
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QColor, QImage
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import Qt, QSettings
+    from PySide6.QtWidgets import QMessageBox
+    from unittest.mock import patch
+    import app as app_module
     from app import CanvasScene, OutputWindow
     from post_export import TextTimeline, VideoExport
     from recorder import resolve_ffmpeg
@@ -26,6 +29,21 @@ def run():
         motion=dict(intro='Fade', outro='Fade', unit='Word', intro_ms=100, outro_ms=100, stagger_ms=0))
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
+        # Construct the real control window with isolated settings, no personal
+        # projects/models and no downloads. This catches missing UI bindings in
+        # the packaged application, not just in the small rendering harnesses.
+        with patch.object(app_module, 'SETTINGS_PATH', root / 'display.json'), \
+                patch.object(app_module, 'DICTIONARY_PATH', root / 'dictionary.json'), \
+                patch.object(app_module, 'DICTIONARY_NAME_PATH', root / 'dictionary-name.json'), \
+                patch.object(app_module, 'MODEL_DIR', root / 'voice-model'), \
+                patch.object(app_module, 'QSettings', side_effect=lambda *args: QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat)), \
+                patch.object(app_module.MainWindow, 'prompt_model_if_missing', lambda self: None), \
+                patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Discard):
+            window = app_module.MainWindow()
+            assert window.record_post.isChecked()
+            assert window.updater is not None
+            window.updater.automatic.setChecked(False)
+            assert window.close(), 'The real control window could not close safely'
         background, foreground, clean = root / 'background.mp4', root / 'foreground.mkv', root / 'clean.mp4'
         subprocess.run([ffmpeg, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:r=10:d=1',
                         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(background)], check=True)
@@ -84,7 +102,7 @@ def run():
                 export.cancel()
                 export.thread.join(5)
     result = {'success': True, 'version': VERSION, 'checks': [
-        'Qt presentation text painter', 'bundled FFmpeg', 'alpha foreground capture',
+        'real control window startup', 'Qt presentation text painter', 'bundled FFmpeg', 'alpha foreground capture',
         'deterministic aligned overlay frames', 'H.264/AAC final export',
         'foreground preserved above text', 'speech/camera/VST dependencies import']}
     if '--smoke-report' in sys.argv:

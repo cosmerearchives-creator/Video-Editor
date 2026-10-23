@@ -63,6 +63,11 @@ def main():
                     directory.mkdir(exist_ok=True)
                     shutil.copy2(origin, directory / origin.name)
     (portable / 'docs' / 'dependency-versions.txt').write_text('\n'.join(sorted(inventory)), encoding='utf-8')
+    import imageio_ffmpeg
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    details = '\n\n'.join(subprocess.run([ffmpeg, argument], capture_output=True, text=True,
+                                         check=True).stdout for argument in ('-version', '-L'))
+    (portable / 'docs' / 'ffmpeg-build-and-license.txt').write_text(details, encoding='utf-8')
     # Verify the actual frozen application, including Qt image export and FFmpeg.
     report = build / 'frozen-smoke.json'
     subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-test', '--smoke-report', str(report)],
