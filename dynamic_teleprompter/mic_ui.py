@@ -6,8 +6,8 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath
 from PySide6.QtWidgets import (QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QCheckBox, QComboBox, QDoubleSpinBox, QSpinBox, QLabel,
-    QPushButton, QDialogButtonBox, QGridLayout)
-from mic_dsp import DEFAULT_BANDS, EQ_TYPES, bands_value, eq_response
+    QPushButton, QDialogButtonBox, QGridLayout, QScrollArea)
+from mic_dsp import DEFAULT_BANDS, EQ_TYPES, MAX_EQ_BANDS, bands_value, eq_response
 
 
 class EQGraph(QWidget):
@@ -68,27 +68,27 @@ class MicrophoneEffectsDialog(QDialog):
         eq = next(e for e in self.chain if e['type']=='eq')
         self.eq_enabled.setChecked(eq['enabled']); eq_layout.addWidget(self.eq_enabled)
         self.graph = EQGraph(); eq_layout.addWidget(self.graph)
-        grid = QGridLayout(); eq_layout.addLayout(grid)
-        for column, title in enumerate(('On', 'Filter', 'Frequency (Hz)', 'Gain (dB)', 'Q / bandwidth')):
-            grid.addWidget(QLabel(title), 0, column)
-        self.rows = []
-        for row, band in enumerate(bands_value(eq.get('bands')), 1):
-            enabled = QCheckBox(); enabled.setChecked(band['enabled'])
-            kind = QComboBox(); kind.addItems(EQ_TYPES); kind.setCurrentText(band['kind'])
-            f = QDoubleSpinBox(); f.setRange(20, 20000); f.setValue(band['frequency']); f.setSingleStep(10)
-            gain = QDoubleSpinBox(); gain.setRange(-24, 24); gain.setValue(band['gain']); gain.setSingleStep(.5)
-            q = QDoubleSpinBox(); q.setRange(.1, 18); q.setValue(band['q']); q.setSingleStep(.1)
-            for column, widget in enumerate((enabled, kind, f, gain, q)):
-                grid.addWidget(widget, row, column)
-                if isinstance(widget, QDoubleSpinBox):
-                    widget.setKeyboardTracking(False)
-                    widget.valueChanged.connect(self.refresh_graph)
-            enabled.toggled.connect(self.refresh_graph)
-            kind.currentTextChanged.connect(self.refresh_graph)
-            self.rows.append((enabled, kind, f, gain, q))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumHeight(180)
+        scroll.setMaximumHeight(320)
+        self.band_widget = QWidget()
+        self.band_grid = QGridLayout(self.band_widget)
+        scroll.setWidget(self.band_widget)
+        eq_layout.addWidget(scroll)
+        self.rows, self.remove_buttons = [], []
+        actions = QHBoxLayout()
+        self.add_band_button = QPushButton('Add Band')
+        self.add_band_button.clicked.connect(self.add_band)
+        actions.addWidget(self.add_band_button)
+        self.band_count = QLabel()
+        actions.addWidget(self.band_count)
+        actions.addStretch()
+        eq_layout.addLayout(actions)
+        self.build_rows(bands_value(eq.get('bands')))
         info = QLabel('Peak and shelf bands use Q to control width. High/low pass filters use a fixed slope; gain and Q do not apply.')
         info.setWordWrap(True); eq_layout.addWidget(info)
-        reset = QPushButton('Reset EQ to flat'); reset.clicked.connect(self.reset_eq); eq_layout.addWidget(reset)
+        reset = QPushButton('Reset EQ to six flat bands'); reset.clicked.connect(self.reset_eq); eq_layout.addWidget(reset)
         tabs.addTab(eq_page, 'Parametric EQ')
         cleanup = QWidget(); form = QFormLayout(cleanup)
         suppress = next(e for e in self.chain if e['type']=='suppress')
@@ -120,15 +120,62 @@ class MicrophoneEffectsDialog(QDialog):
         return [dict(enabled=e.isChecked(),kind=k.currentText(),frequency=f.value(),gain=g.value(),q=q.value()) for e,k,f,g,q in self.rows]
 
     def refresh_graph(self, *_):
+        if getattr(self, '_building', False):
+            return
         for _, kind, _, gain, q in self.rows:
             adjustable = kind.currentText() not in ('High pass','Low pass')
             gain.setEnabled(adjustable); q.setEnabled(adjustable)
         self.graph.set_bands(self.bands())
 
-    def reset_eq(self):
-        for (e,k,f,g,q), b in zip(self.rows, DEFAULT_BANDS):
-            e.setChecked(b['enabled']); k.setCurrentText(b['kind']); f.setValue(b['frequency']); g.setValue(0); q.setValue(b['q'])
+    def build_rows(self, bands):
+        self._building = True
+        while self.band_grid.count():
+            item = self.band_grid.takeAt(0)
+            if item.widget():
+                item.widget().blockSignals(True)
+                item.widget().deleteLater()
+        self.rows, self.remove_buttons = [], []
+        for column, title in enumerate(('On', 'Filter', 'Frequency (Hz)', 'Gain (dB)', 'Q / bandwidth', '')):
+            self.band_grid.addWidget(QLabel(title), 0, column)
+        for row, band in enumerate(bands, 1):
+            enabled = QCheckBox(); enabled.setChecked(band['enabled'])
+            kind = QComboBox(); kind.addItems(EQ_TYPES); kind.setCurrentText(band['kind'])
+            f = QDoubleSpinBox(); f.setRange(20,20000); f.setValue(band['frequency']); f.setSingleStep(10)
+            gain = QDoubleSpinBox(); gain.setRange(-24,24); gain.setValue(band['gain']); gain.setSingleStep(.5)
+            q = QDoubleSpinBox(); q.setRange(.1,18); q.setValue(band['q']); q.setSingleStep(.1)
+            for column, widget in enumerate((enabled,kind,f,gain,q)):
+                self.band_grid.addWidget(widget,row,column)
+                if isinstance(widget,QDoubleSpinBox):
+                    widget.setKeyboardTracking(False)
+                    widget.valueChanged.connect(self.refresh_graph)
+            enabled.toggled.connect(self.refresh_graph)
+            kind.currentTextChanged.connect(self.refresh_graph)
+            self.rows.append((enabled,kind,f,gain,q))
+            remove = QPushButton('Remove')
+            remove.setToolTip(f'Remove band {row}')
+            remove.clicked.connect(self.remove_band)
+            self.band_grid.addWidget(remove,row,5)
+            self.remove_buttons.append(remove)
+        self._building = False
+        self.add_band_button.setEnabled(len(bands)<MAX_EQ_BANDS)
+        self.band_count.setText(f'{len(bands)} / {MAX_EQ_BANDS} bands')
         self.refresh_graph()
+
+    def add_band(self):
+        bands = self.bands()
+        if len(bands)<MAX_EQ_BANDS:
+            bands.append(dict(kind='Peak',frequency=1000.,gain=0.,q=1.,enabled=True))
+            self.build_rows(bands)
+
+    def remove_band(self):
+        sender = self.sender()
+        if sender in self.remove_buttons:
+            bands = self.bands()
+            bands.pop(self.remove_buttons.index(sender))
+            self.build_rows(bands)
+
+    def reset_eq(self):
+        self.build_rows(bands_value(DEFAULT_BANDS))
 
     def apply(self):
         for e in self.chain:

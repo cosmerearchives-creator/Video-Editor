@@ -5,6 +5,7 @@ import threading
 import numpy as np
 
 RATE = 48000
+MAX_EQ_BANDS = 32
 EQ_TYPES = ('Peak', 'Low shelf', 'High shelf', 'High pass', 'Low pass')
 DEFAULT_BANDS = [dict(kind='High pass', frequency=80., gain=0., q=.707, enabled=False),
                  *[dict(kind='Peak', frequency=f, gain=0., q=1., enabled=True)
@@ -15,7 +16,7 @@ _init_lock = threading.Lock()
 
 def bands_value(bands):
     result = []
-    for band in (bands if isinstance(bands, list) else DEFAULT_BANDS)[:12]:
+    for band in (bands if isinstance(bands, list) else DEFAULT_BANDS)[:MAX_EQ_BANDS]:
         if not isinstance(band, dict):
             continue
         result.append(dict(kind=band.get('kind') if band.get('kind') in EQ_TYPES else 'Peak',

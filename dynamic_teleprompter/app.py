@@ -45,8 +45,8 @@ from native_engine import chroma_key_inplace, color_adjust_inplace, backend_stat
 from spellchecker import SpellChecker
 
 APP_VERSION = 'v' + VERSION
-APP_NEWS = ('New: parametric microphone EQ, RNNoise suppression and smooth gate controls; '
-            'draggable canvas text, improved mouth sensitivity controls and automatic session restore.')
+APP_NEWS = ('Final v0.6.00: aligned text playback preview, a focused review queue and millisecond timestamps; '
+            'record directly from Script Playback or Reader and add/remove parametric EQ bands.')
 
 DICTIONARY_PATH = Path.home() / '.dynamic_teleprompter_dictionary.json'
 DICTIONARY_NAME_PATH = Path.home() / '.dynamic_teleprompter_dictionary_name.json'
@@ -1789,6 +1789,27 @@ class VoiceWorker(QThread):
             self.status.emit('Microphone stopped')
 
 
+class RecordingControls(QWidget):
+    requested = Signal()
+
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0,0,0,0)
+        self.toggle = QPushButton('● Start Recording')
+        self.toggle.clicked.connect(self.requested)
+        self.indicator = QLabel('Ready')
+        layout.addWidget(self.toggle)
+        layout.addWidget(self.indicator,1)
+
+    def set_state(self, recorder):
+        stopping = recorder is not None and recorder.stopping
+        self.toggle.setEnabled(not stopping)
+        self.toggle.setText('Saving recording…' if stopping else '■ Stop Recording' if recorder is not None else '● Start Recording')
+        self.indicator.setText('Finalizing…' if stopping else f'● REC {recorder.elapsed():.3f} s' if recorder is not None else 'Ready')
+        self.indicator.setStyleSheet('color: #c63232; font-weight: bold;' if recorder is not None else '')
+
+
 class ReaderWindow(QWidget):
     """Speech-following reader view, separate from OBS output.
 
@@ -1806,6 +1827,8 @@ class ReaderWindow(QWidget):
         self.status = QLabel('NEXT WORD  •  Ready')
         self.status.setStyleSheet('color: #FACC15; font-weight: bold; font-size: 15px; padding: 6px;')
         layout.addWidget(self.status)
+        self.record_controls = RecordingControls()
+        layout.addWidget(self.record_controls)
         self.view = QTextEdit()
         self.view.setReadOnly(True)
         self.view.setUndoRedoEnabled(False)
@@ -1971,6 +1994,11 @@ class MainWindow(QMainWindow):
         self.test_advance_timer.timeout.connect(self._animation_test_progress)
         self._test_rendered_prefix = None
         self.build_ui()
+        self.reader.record_controls.requested.connect(self._toggle_recording)
+        self._record_ui_timer = QTimer(self)
+        self._record_ui_timer.setInterval(100)
+        self._record_ui_timer.timeout.connect(self._sync_record_controls)
+        self._record_ui_timer.start()
         self.load_settings()
         self.prepare_groups()
         self._saved_project_snapshot = self._project_snapshot()
@@ -2525,6 +2553,10 @@ class MainWindow(QMainWindow):
             self.recorder.audio_chain = self._audio_chain_snapshot()
             self.recorder.audio_clip_drive = self.audio_clip_drive.value()
 
+    def _sync_record_controls(self):
+        self.script_record_controls.set_state(self.recorder)
+        self.reader.record_controls.set_state(self.recorder)
+
     def _toggle_recording(self):
         if self.recorder is not None:
             self._stop_recording()
@@ -2773,6 +2805,9 @@ class MainWindow(QMainWindow):
         self.start_presentation_button.setMinimumHeight(34)
         self.start_presentation_button.clicked.connect(self.start_presentation)
         presentation_layout.addWidget(self.start_presentation_button)
+        self.script_record_controls = RecordingControls()
+        self.script_record_controls.requested.connect(self._toggle_recording)
+        presentation_layout.addWidget(self.script_record_controls)
         self.start_first_slide = QCheckBox('Start with first slide already displayed')
         self.start_first_slide.setChecked(True)
         presentation_layout.addWidget(self.start_first_slide)
@@ -4606,6 +4641,7 @@ class MainWindow(QMainWindow):
             return
         self.autosave_session()
         self._session_timer.stop()
+        self._record_ui_timer.stop()
         self.stop_animation_test()
         if self.animation_test_window is not None:
             self.animation_test_window.close()

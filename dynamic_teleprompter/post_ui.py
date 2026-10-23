@@ -3,14 +3,14 @@ import math
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtGui import QColor, QImage
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QFileDialog, QHBoxLayout,
     QLabel, QMessageBox, QPushButton, QSlider, QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from postprocess import align_recording, validate_words, write_json
 from post_export import TextTimeline, VideoExport
+from review_preview import ReviewVideo, SourceFrames, composite_frame
 
 
 class AlignmentTask(QThread):
@@ -51,27 +51,55 @@ class AlignmentDialog(QDialog):
         self.align = QPushButton('Automatically Align Script to Voice')
         self.align.clicked.connect(self.start_alignment)
         layout.addWidget(self.align)
-        video = QVideoWidget()
-        video.setMinimumHeight(180)
+        self.video = ReviewVideo()
+        self.preview_timeline = None
+        self.preview_index, self.preview_generation = 0, 0
+        self.sources = SourceFrames(self.path, self.session, self.ffmpeg, self)
+        self.sources.ready.connect(self.source_ready)
+        self.preview_refresh = QTimer(self)
+        self.preview_refresh.setSingleShot(True)
+        self.preview_refresh.setInterval(100)
+        self.preview_refresh.timeout.connect(self.rebuild_preview)
         self.player, self.audio = QMediaPlayer(self), QAudioOutput(self)
-        self.player.setVideoOutput(video)
+        self.video_sink = QVideoSink(self)
+        self.player.setVideoSink(self.video_sink)
+        self.video_sink.videoFrameChanged.connect(self.video_frame)
         self.player.setAudioOutput(self.audio)
         self.player.setSource(QUrl.fromLocalFile(str(self.path.parent / self.session['video'])))
-        layout.addWidget(video)
+        layout.addWidget(self.video)
         row = QHBoxLayout()
         play = QPushButton('Play / Pause')
-        play.clicked.connect(lambda: self.player.pause() if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else self.player.play())
+        play.clicked.connect(self.toggle_play)
         row.addWidget(play)
+        self.timestamp = QLabel()
+        self.timestamp.setMinimumWidth(180)
+        self.update_timestamp(0)
+        row.addWidget(self.timestamp)
         self.seek = QSlider(Qt.Orientation.Horizontal)
         self.seek.setRange(0, round(self.session['duration'] * 1000))
         self.seek.sliderMoved.connect(self.player.setPosition)
-        self.player.positionChanged.connect(self.seek.setValue)
+        self.player.positionChanged.connect(self.position_changed)
         row.addWidget(self.seek, 1)
         layout.addLayout(row)
+        filters = QHBoxLayout()
+        self.show_all = QCheckBox('Show all words')
+        self.show_all.toggled.connect(self.update_queue)
+        filters.addWidget(self.show_all)
+        self.show_overlay = QCheckBox('Show text overlay')
+        self.show_overlay.setChecked(True)
+        self.show_overlay.toggled.connect(self.request_preview)
+        filters.addWidget(self.show_overlay)
+        self.queue_count = QLabel()
+        filters.addWidget(self.queue_count, 1)
+        self.preview_status = QLabel('Text preview follows saved presentation styling and edited timings.')
+        self.preview_status.setWordWrap(True)
+        layout.addLayout(filters)
+        layout.addWidget(self.preview_status)
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(['Slide', 'Word', 'Start (s)', 'End (s)', 'Include', 'Reviewed', 'Needs attention'])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.itemSelectionChanged.connect(self.seek_selected)
+        self.table.itemChanged.connect(self.edited)
         layout.addWidget(self.table, 1)
         buttons = QHBoxLayout()
         save = QPushButton('Save Timing Edits')
@@ -94,6 +122,7 @@ class AlignmentDialog(QDialog):
 
     def populate(self):
         words = self.data.get('words', [])
+        self.table.blockSignals(True)
         self.table.setRowCount(len(words))
         for row, word in enumerate(words):
             values = [str(word['slide'] + 1), word['text'],
@@ -106,24 +135,148 @@ class AlignmentDialog(QDialog):
                     item.setCheckState(Qt.CheckState.Checked if word['include' if column == 4 else 'reviewed'] else Qt.CheckState.Unchecked)
                 elif column in (0, 6):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                if word.get('flags') and not word.get('reviewed'):
-                    item.setBackground(QColor('#5c4718'))
                 self.table.setItem(row, column, item)
+        self.table.blockSignals(False)
+        self.update_queue()
+        self.preview_refresh.start()
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setStretchLastSection(True)
 
-    def collect(self):
+    def collect(self, tolerant=False):
         words = []
         for row, old in enumerate(self.data.get('words', [])):
             word = dict(old)
             word['text'] = self.table.item(row, 1).text().strip()
             for column, key in ((2, 'start'), (3, 'end')):
                 text = self.table.item(row, column).text().strip()
-                word[key] = float(text) if text else None
+                try:
+                    word[key] = float(text) if text else None
+                except ValueError:
+                    if not tolerant:
+                        raise ValueError(f'Word {row+1}: enter a numeric {key} time in seconds')
+                    word[key] = None
             word['include'] = self.table.item(row, 4).checkState() == Qt.CheckState.Checked
             word['reviewed'] = self.table.item(row, 5).checkState() == Qt.CheckState.Checked
             words.append(word)
         return words
+
+    def row_errors(self, words):
+        errors, previous = [], 0.
+        for word in words:
+            error = ''
+            if word.get('include'):
+                start, end = word.get('start'), word.get('end')
+                if not word.get('text'):
+                    error = 'Empty word: enter text or uncheck Include'
+                elif not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+                    error = 'Invalid or missing audio timing'
+                elif not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= self.session['duration'] + .05):
+                    error = 'Invalid start/end times'
+                elif start < previous - .01:
+                    error = 'Overlaps or precedes the previous word'
+                else:
+                    previous = end
+            errors.append(error)
+        return errors
+
+    def update_queue(self, *_):
+        words = self.collect(tolerant=True)
+        errors = self.row_errors(words)
+        pending = 0
+        self.table.blockSignals(True)
+        try:
+            for row, (word, error) in enumerate(zip(words, errors)):
+                unresolved = bool(error) or not word.get('reviewed')
+                pending += unresolved
+                self.table.setRowHidden(row, not self.show_all.isChecked() and not unresolved)
+                notes = ([error] if error else [])
+                if not word.get('include') and not word.get('reviewed'):
+                    notes.append('Confirm skipped word')
+                if not word.get('reviewed'):
+                    notes += [f for f in word.get('flags', []) if 'Invalid' not in f and f not in notes]
+                self.table.item(row, 6).setText('; '.join(notes))
+                for column in range(self.table.columnCount()):
+                    item = self.table.item(row, column)
+                    item.setBackground(QColor('#fff0c2') if unresolved else QColor('white'))
+                    item.setForeground(QColor('#202020'))
+        finally:
+            self.table.blockSignals(False)
+        self.queue_count.setText(f'{pending} words need attention / {len(words)} total')
+
+    def edited(self, item):
+        self.update_queue()
+        self.preview_refresh.start()
+
+    def toggle_play(self):
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def update_timestamp(self, milliseconds):
+        self.timestamp.setText(f'{milliseconds/1000:.3f} s / {self.session["duration"]:.3f} s')
+
+    def position_changed(self, milliseconds):
+        if not self.seek.isSliderDown():
+            self.seek.setValue(milliseconds)
+        self.update_timestamp(milliseconds)
+        if self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+            self.request_preview()
+
+    def video_frame(self, frame):
+        if getattr(self, '_preview_closed', False) or not frame.isValid():
+            return
+        # The clean recording remains a fallback while the source worker seeks.
+        if not self.show_overlay.isChecked() or self.preview_timeline is None:
+            self.video.display(frame.toImage())
+        milliseconds = frame.startTime()/1000 if frame.startTime() >= 0 else self.player.position()
+        self.request_preview(milliseconds=milliseconds)
+
+    def request_preview(self, *_args, milliseconds=None):
+        if getattr(self, '_preview_closed', False):
+            return
+        milliseconds = self.player.position() if milliseconds is None else milliseconds
+        index = min(max(0, math.floor(milliseconds*self.session['fps']/1000)),
+                    max(0, math.ceil(self.session['duration']*self.session['fps'])-1))
+        if index < self.preview_index or abs(index-self.preview_index) > self.session['fps']//2:
+            self.preview_generation += 1
+        self.preview_index = index
+        self.sources.request(index, self.preview_generation)
+
+    def rebuild_preview(self):
+        if self.preview_timeline:
+            self.preview_timeline.close()
+            self.preview_timeline = None
+        words = self.collect(tolerant=True)
+        errors = self.row_errors(words)
+        preview = [dict(word, reviewed=True) for word, error in zip(words, errors)
+                   if word.get('include') and not error and word.get('text')]
+        if preview:
+            try:
+                self.preview_timeline = TextTimeline(self.scene_class, self.session, preview)
+                self.preview_status.setText('Preview uses edited timings and saved presentation animations, styles and layer order.'
+                    + (' Words with invalid timing are omitted until corrected.' if any(errors) else ''))
+            except Exception as exc:
+                self.preview_status.setText('Text preview unavailable: ' + str(exc))
+        else:
+            self.preview_status.setText('Align the recording or correct word timings to preview presentation text.')
+        self.preview_generation += 1
+        self.request_preview()
+
+    def source_ready(self, index, generation, image, error):
+        if getattr(self, '_preview_closed', False) or generation != self.preview_generation or index < self.preview_index-3:
+            return
+        if error:
+            self.preview_status.setText('Preview source error: ' + error)
+            return
+        width = image.width()//2
+        background = image.copy(0, 0, width, image.height())
+        foreground = image.copy(width, 0, width, image.height())
+        if self.show_overlay.isChecked() and self.preview_timeline:
+            overlay = self.preview_timeline.frame(index/self.session['fps'])
+            self.video.display(composite_frame(background, overlay, foreground))
+        else:
+            self.video.display(composite_frame(background, QImage(), foreground))
 
     def save_edits(self):
         try:
@@ -136,7 +289,7 @@ class AlignmentDialog(QDialog):
             return False
 
     def confirm_selected(self):
-        for index in self.table.selectionModel().selectedRows():
+        for index in list(self.table.selectionModel().selectedRows()):
             self.table.item(index.row(), 5).setCheckState(Qt.CheckState.Checked)
 
     def seek_selected(self):
@@ -145,7 +298,7 @@ class AlignmentDialog(QDialog):
             return
         try:
             self.player.setPosition(round(float(self.table.item(row, 2).text()) * 1000))
-        except ValueError:
+        except (ValueError, OverflowError):
             pass
 
     def start_alignment(self):
@@ -198,6 +351,7 @@ class AlignmentDialog(QDialog):
             self.parent()._post_busy = True
             self.align.setEnabled(False)
             self.export_button.setEnabled(False)
+            self.table.setEnabled(False)
             self.frame_index, self.ending, self.pending_image = 0, False, None
             self.export_timer.start()
         except Exception as exc:
@@ -216,6 +370,7 @@ class AlignmentDialog(QDialog):
             self.parent()._post_busy = False
             self.align.setEnabled(True)
             self.export_button.setEnabled(True)
+            self.table.setEnabled(True)
             self.status.setText('Export failed: ' + error if error else 'Saved aligned video: ' + str(output))
             return
         if self.ending:
@@ -235,10 +390,29 @@ class AlignmentDialog(QDialog):
             self.export.cancel()
             self.export.error = str(exc)
 
+    def done(self, result):
+        if self.worker is not None or self.export is not None:
+            return
+        self.stop_preview()
+        super().done(result)
+
+    def stop_preview(self):
+        if getattr(self, '_preview_closed', False):
+            return
+        self._preview_closed = True
+        self.player.stop()
+        self.player.setVideoSink(None)
+        self.player.setSource(QUrl())
+        self.preview_refresh.stop()
+        self.sources.stop()
+        if self.preview_timeline:
+            self.preview_timeline.close()
+            self.preview_timeline = None
+
     def closeEvent(self, event):
         if self.worker is not None or self.export is not None:
             QMessageBox.information(self, 'Work in progress', 'Wait for alignment or export to finish before closing.')
             event.ignore()
             return
-        self.player.stop()
+        self.stop_preview()
         super().closeEvent(event)

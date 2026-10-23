@@ -1,3 +1,3 @@
-VERSION = '0.5.0-alpha18'
+VERSION = '0.6.00'
 REPOSITORY = 'cosmerearchives-creator/Video-Editor'
 PRODUCT = 'Cosmere-Cam'
