@@ -1,0 +1,15 @@
+NOTE: Setup instructions in this older release note have been superseded by ALPHA13_2_HOTFIX.txt.
+
+v0.5.0-alpha13 - Experimental webcam head-position Live2D tracking
+
+1. Run setup_live2d_sdk_windows.bat as in alpha11/12.
+2. Run install_face_tracking_windows.bat (optional OpenCV dependency).
+3. Start the application, open the Visual Layer Editor and select a Live2D layer.
+4. Check Enable face tracking for this Live2D layer.
+5. Select camera index (usually 0) and click Start Face Tracking.
+6. Confirm status says Tracking face (head position). Move your head left/right/up/down.
+7. Test preview, PNG export, and MP4 recording.
+
+LIMITATIONS: This early detector estimates head movement from the position of a face rectangle, NOT true head pose. It cannot track mouth, blinks, gaze, rotation, expressions or Cubism physics. Static mesh rendering is CPU-heavy; dynamic mesh updates may be slow. No webcam recording or upload. OpenCV wheel availability depends on your Python version.
+
+The camera tracking worker is stopped when the main app closes. Tracking for each model is project saved.

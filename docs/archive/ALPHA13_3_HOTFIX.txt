@@ -1,0 +1,22 @@
+Dynamic Teleprompter v0.5.0-alpha13.3 — Webcam Selection Hotfix
+
+In Visual Layer Editor, choose the Live2D model, then choose a camera from the
+new Webcam dropdown. "Refresh" scans camera indexes 0–7 asynchronously and marks
+those that return frames as available. Camera indexes 0–9 remain selectable
+manually if detection is incomplete. The selected camera index is remembered
+between launches. Click Start Tracking to open that specific camera.
+
+The camera status reports the chosen index, selected Windows capture backend,
+and whether a face is currently detected. When a Live2D model is selected,
+Start Tracking enables tracking for that layer if it was off.
+
+Tips if no cameras are available:
+* Run setup_windows.bat and select the optional webcam tracking dependency.
+* Close Zoom, Teams, OBS, and other applications that may occupy the camera.
+* Check Windows Settings > Privacy & security > Camera > Let desktop apps access your camera.
+* Try Refresh and then another index. OpenCV doesn't provide device names reliably.
+* This is still basic head-position tracking, not full facial landmarks/eye/mouth tracking.
+
+The DLL from the official Cubism SDK remains installed at the permanent user path.
+Python compilation and isolated camera-selection tests do not prove Windows
+webcam operation; the UI and actual face tracking still need your testing.

@@ -1,0 +1,20 @@
+Dynamic Teleprompter v0.5.0-alpha13.5 — Camera identification and tracking improvements
+
+Changes:
+- Identify Camera button takes a diagnostic snapshot from the selected camera to make device selection possible even when Windows cannot provide a reliable device-name/index correspondence.
+- A live camera preview is shown during tracking. Camera data stays local.
+- Experimental eye-pair slope estimate drives Live2D ParamAngleZ (head roll) when eye detection succeeds; face-position X/Y tracking remains the fallback.
+- Head parameter smoothing updated. Start/Stop toggle and permanent Cubism Core lookup retained.
+
+Notes:
+- Camera names are only shown if the optional pygrabber library can enumerate and accurately match DirectShow camera indexes. The new visual identification method works independently of friendly names.
+- Do not run camera identification at the same time as another app holding exclusive access to the device.
+- Eye-pair estimation uses OpenCV Haar detectors, and is NOT a full facial landmark tracker. Blinking, mouth shapes, gaze, physics, and precise 3D pose estimation are not supported yet.
+- Run setup_windows.bat if OpenCV or pygrabber is missing. Windows webcam permissions must allow desktop apps.
+- Python compilation passed. Webcam, Live2D rendering, and audio hardware behavior require Windows testing.
+
+Testing:
+1. Refresh cameras, choose one, click Identify Camera and verify it shows the correct device.
+2. Start Tracking and confirm the button switches to Stop and a live preview appears.
+3. Check model response to face movement; tilt head slowly and observe whether eye roll is detected.
+4. Verify static Live2D canvas/PNG/video recording and audio monitoring still work.

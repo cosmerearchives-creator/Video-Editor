@@ -1,0 +1,10 @@
+v0.5.0-alpha13.4 Camera UX hotfix
+
+- Camera list shows friendly Windows DirectShow names when optional pygrabber is installed.
+- Camera labels have a wider dropdown popup and hover tooltips.
+- Detected cameras are shown first; a manual camera-index option remains.
+- Status text no longer tells you to select a camera after the scan has finished.
+- Start Tracking is a toggle that becomes Stop Tracking while the worker is running.
+- Unified setup offers optional pygrabber. It is not required for tracking.
+
+Notes: OpenCV indexes are backend-specific; a DirectShow name is never assigned to a non-DirectShow camera by guesswork. Camera index selection is saved locally. This hotfix does not add landmark tracking.

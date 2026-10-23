@@ -1,0 +1,16 @@
+Dynamic Teleprompter v0.5.0-alpha13.2 - Shared Runtime & Setup Hotfix
+
+Run start_windows.bat. On first launch it runs setup_windows.py, installing missing
+required Python packages and offering optional components (webcam, VST3 host,
+Cubism Core, developer tools). The interactive setup can be run again any time
+with setup_windows.bat. It does not install build tools automatically.
+
+Cubism Core DLL is installed, from YOUR officially downloaded SDK ZIP, to:
+  %LOCALAPPDATA%\DynamicTeleprompter\Runtime\Live2D\Live2DCubismCore.dll
+Subsequent release folders will find the DLL at that permanent path.
+Search order: LIVE2D_CORE_PATH (file or directory), permanent user path, then
+legacy local live2d_sdk folder and local application directory.
+
+This release does not distribute the proprietary Live2D Cubism DLL.
+All existing animation, audio and rendering implementations remain experimental.
+Python syntax and archive checks do not prove Windows runtime behavior.

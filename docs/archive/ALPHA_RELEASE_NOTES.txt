@@ -1,0 +1,24 @@
+Dynamic Teleprompter v0.5.0-alpha12 — Live2D mask and blend preview
+
+Changes since alpha11:
+* Supports basic drawable clipping masks in the experimental Cubism mesh renderer.
+* Supports inverted drawable masks.
+* Supports additive and multiplicative blending as indicated by Cubism drawable flags.
+* Caches the final static pose for shared preview, PNG and video recording.
+* Keeps the existing SDK setup flow. Official Live2D SDK binaries are NOT included.
+
+Known limitations:
+* This is an experimental CPU Qt mesh renderer, NOT the official Cubism GPU renderer.
+* Advanced Cubism color/alpha blending, art-mesh shader treatments, physics,
+  expressions, .motion3 animations, lip sync and webcam face tracking are not implemented.
+* Models with sophisticated masks or newer blend modes may still differ substantially
+  from VTube Studio. Mask rendering may take time the first time a static pose is cached.
+* Windows/PySide6 rendering has NOT been visually or end-to-end tested here.
+* The project retains paths to model assets; models are not bundled in this archive.
+
+Test procedure:
+1. Install the official SDK DLL locally if needed with setup_live2d_sdk_windows.bat.
+2. Load the same .model3.json that worked in alpha11 (for example Arc2).
+3. Check whether eyes, hair, face and masked details now appear more correctly.
+4. Export a PNG and record an MP4. Both should match the live canvas.
+5. Report any clipping errors with a screenshot; compare with the original model.

@@ -1,0 +1,32 @@
+Dynamic Teleprompter v0.5.0-alpha16 — WASD Live2D Movement
+
+NEW
+- Select a Live2D model in Visual Layer Editor and click "Movement…".
+- Enable keyboard movement for that model; configurable horizontal/vertical speed.
+- Hold A/D to move horizontally. Model head turns in the travel direction if it has ParamAngleY.
+- Movement speed increases as the turn builds; on release the head returns to neutral and horizontal movement eases to a stop.
+- W moves toward the far boundary (up); S moves toward the near boundary (down).
+- Perspective simulation: configurable far/near Y limits and far/near scales.
+- Diagonal movement is normalized, and movement is frame-time-based.
+- Character remains at its final position on release.
+- Ignore WASD when typing in an input field; controls work while the main app, Output, or Visual Layer Editor has focus.
+- Per-layer movement configuration saved in project; transient key/velocity state is not saved.
+- Camera tracking remains hidden; camera-free idle animations and model switching remain available.
+
+TEST ON WINDOWS
+1. Load a Live2D model; open Visual Layer Editor > Movement…; enable controls.
+2. With Output window or layer editor (not a text field) focused, hold D, release; compare head turn and travel speed.
+3. Press A and immediately reverse with D; check for smooth transition.
+4. Hold W then S; verify depth scaling and Y boundaries.
+5. Press W+D simultaneously; verify reasonable diagonal speed.
+6. Type WASD into a script text field; model must not move.
+7. Save project, reopen, verify movement configuration/position; confirm no stuck movement key after switching apps.
+8. Record a short video while moving model and check motion in the MP4.
+
+LIMITATIONS
+- No global keyboard hook: WASD only responds when Dynamic Teleprompter windows are active.
+- During model rendering, animated Cubism mesh regeneration remains limited to roughly 15 updates/sec; canvas movement itself is evaluated at 60Hz.
+- Head turn requires the model to expose ParamAngleY; movement works without it.
+- Perspective is a 2D scale illusion, not 3D geometry or scenery depth sorting.
+- Existing Qt camera functionality is preserved in the backend but not shown in layer editor.
+- Windows GUI, model-specific appearance and recording have not been tested here.
