@@ -140,6 +140,9 @@ class AlignmentDialog(QDialog):
         self.update_queue()
         self.preview_refresh.start()
         self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(1, max(140, self.table.columnWidth(1)))
+        for column in (2,3):
+            self.table.setColumnWidth(column, max(80, self.table.columnWidth(column)))
         self.table.horizontalHeader().setStretchLastSection(True)
 
     def collect(self, tolerant=False):
