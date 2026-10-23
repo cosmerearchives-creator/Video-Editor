@@ -104,7 +104,8 @@ class CanvasRecorder:
                    '-i', 'pipe:0', '-an', '-c:v', 'libx264', '-preset', 'ultrafast',
                    '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(self._silent)]
         self._video = subprocess.Popen(command, stdin=subprocess.PIPE,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self._started = time.monotonic()
         try:
             if self.session is not None:
@@ -116,7 +117,8 @@ class CanvasRecorder:
                     '-f', 'rawvideo', '-pixel_format', 'rgba', '-video_size', f'{self.width}x{self.height}',
                     '-framerate', str(self.fps), '-i', 'pipe:0', '-an', '-c:v', 'ffv1',
                     '-pix_fmt', 'bgra', str(self._foreground_path)], stdin=subprocess.PIPE,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 self._voice_path = self.assets_dir / 'voice.wav'
                 self._raw_audio_file = wave.open(str(self._voice_path), 'wb')
                 self._raw_audio_file.setnchannels(1)
@@ -337,7 +339,8 @@ class CanvasRecorder:
                     '-map', '[clean]', '-map', '2:a:0', '-c:v', 'libx264', '-crf', '18',
                     '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
                     '-t', str(self.frame_count / self.fps), '-movflags', '+faststart', str(self.path)]
-                subprocess.run(command, check=True, capture_output=True)
+                subprocess.run(command, check=True, capture_output=True,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 self.session.update(format='CosmereCamRecording', version=1,
                     video='../' + self.path.name, background=background.name, foreground=self._foreground_path.name,
                     voice=self._voice_path.name, duration=self.frame_count / self.fps,
@@ -350,7 +353,8 @@ class CanvasRecorder:
                            '-i', str(self._silent), '-i', str(self._wave),
                            '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac',
                            '-b:a', '160k', '-shortest', '-movflags', '+faststart', str(self.path)]
-                subprocess.run(command, check=True, capture_output=True, timeout=180)
+                subprocess.run(command, check=True, capture_output=True, timeout=180,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             else:
                 shutil.copyfile(self._silent, self.path)
         except Exception as exc:

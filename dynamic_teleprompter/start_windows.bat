@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 set "STATE_DIR=%LOCALAPPDATA%\DynamicTeleprompter"
-set "SETUP_MARKER=%STATE_DIR%\setup_alpha13_2_done.txt"
+set "SETUP_MARKER=%STATE_DIR%\setup_alpha17_done.txt"
 if not exist "%SETUP_MARKER%" (
   echo First launch: checking Dynamic Teleprompter dependencies...
   py -3 setup_windows.py

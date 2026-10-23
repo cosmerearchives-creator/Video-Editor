@@ -114,7 +114,7 @@ class VideoExport:
             '-movflags', '+faststart', str(self.temporary)]
         self.log = tempfile.TemporaryFile()
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                        stderr=self.log)
+                                        stderr=self.log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.frames = queue.Queue(maxsize=3)
         self.finished, self.error, self.cancelled = False, '', False
         self.thread = threading.Thread(target=self._write, daemon=True)

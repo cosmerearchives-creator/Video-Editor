@@ -4519,6 +4519,13 @@ def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
+    import os
+    ready_file = os.environ.get('COSMERE_CAM_READY_FILE')
+    if ready_file:
+        try:
+            Path(ready_file).write_text('ready', encoding='utf-8')
+        except OSError:
+            pass
     sys.exit(app.exec())
 
 

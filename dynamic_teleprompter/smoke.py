@@ -95,3 +95,22 @@ def run():
 
 if __name__ == '__main__':
     run()
+
+
+def run_alignment(voice_path):
+    import wave
+    from postprocess import align_recording, validate_words
+    from recorder import resolve_ffmpeg
+    with wave.open(str(voice_path)) as voice:
+        duration = voice.getnframes() / voice.getframerate()
+    session_path = voice_path.parent / 'speech-test.session.json'
+    session_path.write_text(json.dumps(dict(voice=voice_path.name, language='en', duration=duration,
+        groups=['Hello world.', 'This is a timing test.'])), encoding='utf-8')
+    result = align_recording(session_path, resolve_ffmpeg())
+    assert len(result['words']) == 7, result
+    assert sum(word['include'] for word in result['words']) >= 5, result
+    validate_words(result['words'], duration, require_review=False)
+    report = {'success': True, 'engine': result['engine'], 'words': len(result['words']),
+              'included': sum(word['include'] for word in result['words']),
+              'flagged_for_review': sum(not word['reviewed'] for word in result['words'])}
+    Path(sys.argv[sys.argv.index('--smoke-report') + 1]).write_text(json.dumps(report, indent=2), encoding='utf-8')

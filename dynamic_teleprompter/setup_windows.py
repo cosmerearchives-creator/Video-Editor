@@ -5,11 +5,13 @@ import subprocess
 import sys
 from pathlib import Path
 from setup_live2d_sdk import runtime_directory, install_sdk, DLL
+from release_info import VERSION
 
 HERE = Path(__file__).resolve().parent
 REQUIRED = [('PySide6', 'PySide6>=6.6,<7'), ('spellchecker', 'pyspellchecker>=0.8,<1'),
             ('vosk', 'vosk>=0.3.45,<1'), ('sounddevice', 'sounddevice>=0.4.7,<1'),
-            ('numpy', 'numpy>=2.2,<3')]
+            ('numpy', 'numpy>=2.2,<3'), ('imageio_ffmpeg', 'imageio-ffmpeg==0.6.0'),
+            ('stable_whisper', 'stable-ts==2.19.1')]
 OPTIONAL = [('cv2', 'opencv-python>=4.10,<5', 'webcam face tracking'),
             ('pedalboard', 'pedalboard>=0.9.20,<1', 'VST3 plugin hosting'),
             ('pygrabber', 'pygrabber>=0.2,<1', 'Windows webcam friendly names (optional)')]
@@ -30,7 +32,7 @@ def pip_install(specs):
 
 
 def main():
-    print('Dynamic Teleprompter v0.5.0-alpha13.2 - Unified Setup')
+    print('Cosmere Cam v' + VERSION + ' - Source Setup')
     print('Python:', sys.version.split()[0], '| Executable:', sys.executable)
     missing = [spec for module, spec in REQUIRED if importlib.util.find_spec(module) is None]
     if missing and not pip_install(missing):

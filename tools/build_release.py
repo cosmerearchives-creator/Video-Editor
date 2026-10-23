@@ -69,6 +69,14 @@ def main():
                    check=True, timeout=180)
     if not json.loads(report.read_text(encoding='utf-8')).get('success'):
         raise RuntimeError('Frozen application smoke test failed')
+    voice = build / 'speech-test.wav'
+    subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                    str(ROOT / 'tools' / 'make_test_voice.ps1'), '-Destination', str(voice)], check=True)
+    speech_report = build / 'frozen-alignment.json'
+    subprocess.run([str(version_dir / 'CosmereCam.exe'), '--smoke-align', str(voice),
+                    '--smoke-report', str(speech_report)], check=True, timeout=600)
+    if not json.loads(speech_report.read_text(encoding='utf-8')).get('success'):
+        raise RuntimeError('Frozen speech alignment test failed')
     artifacts = ROOT / 'dist'
     artifacts.mkdir(exist_ok=True)
     target = artifacts / f'{PRODUCT}-v{VERSION}-Windows-x64.zip'
@@ -80,6 +88,7 @@ def main():
         checksum = hashlib.file_digest(file, 'sha256').hexdigest()
     (artifacts / 'SHA256SUMS.txt').write_text(f'{checksum}  {target.name}\n', encoding='utf-8')
     shutil.copy2(report, artifacts / 'frozen-smoke.json')
+    shutil.copy2(speech_report, artifacts / 'frozen-alignment.json')
     print(f'Built {target.name}: {target.stat().st_size / 1024 ** 2:.1f} MB')
 
 

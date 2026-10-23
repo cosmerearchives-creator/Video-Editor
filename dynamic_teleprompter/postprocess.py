@@ -109,7 +109,8 @@ def align_recording(session_path, ffmpeg, progress=lambda message: None, model_n
     import subprocess
     import numpy as np
     decoded = subprocess.run([ffmpeg, '-v', 'error', '-i', str(audio), '-f', 's16le',
-                              '-ac', '1', '-ar', '16000', 'pipe:1'], capture_output=True, check=True)
+                              '-ac', '1', '-ar', '16000', 'pipe:1'], capture_output=True, check=True,
+                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     waveform = np.frombuffer(decoded.stdout, dtype=np.int16).astype(np.float32) / 32768.
     progress('Loading the local speech model (first use downloads model weights)…')
     model = load_model(model_name, device='cpu', download_root=str(cache))
