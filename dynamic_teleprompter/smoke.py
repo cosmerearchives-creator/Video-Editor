@@ -1,5 +1,6 @@
 """Short real Qt/FFmpeg/export check, also executed inside the frozen release."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -29,21 +30,13 @@ def run():
         motion=dict(intro='Fade', outro='Fade', unit='Word', intro_ms=100, outro_ms=100, stagger_ms=0))
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
-        # Construct the real control window with isolated settings, no personal
-        # projects/models and no downloads. This catches missing UI bindings in
-        # the packaged application, not just in the small rendering harnesses.
-        with patch.object(app_module, 'SETTINGS_PATH', root / 'display.json'), \
-                patch.object(app_module, 'DICTIONARY_PATH', root / 'dictionary.json'), \
-                patch.object(app_module, 'DICTIONARY_NAME_PATH', root / 'dictionary-name.json'), \
-                patch.object(app_module, 'MODEL_DIR', root / 'voice-model'), \
-                patch.object(app_module, 'QSettings', side_effect=lambda *args: QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat)), \
-                patch.object(app_module.MainWindow, 'prompt_model_if_missing', lambda self: None), \
-                patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Discard):
-            window = app_module.MainWindow()
-            assert window.record_post.isChecked()
-            assert window.updater is not None
-            window.updater.automatic.setChecked(False)
-            assert window.close(), 'The real control window could not close safely'
+        window_report = root / 'window-smoke.json'
+        command = ([sys.executable] if getattr(sys, 'frozen', False) else
+                   [sys.executable, str(Path(__file__).with_name('desktop_entry.py'))])
+        env = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT='1')
+        subprocess.run([*command, '--smoke-window', '--smoke-report', str(window_report)],
+                       check=True, timeout=90, env=env)
+        assert json.loads(window_report.read_text(encoding='utf-8'))['success']
         background, foreground, clean = root / 'background.mp4', root / 'foreground.mkv', root / 'clean.mp4'
         subprocess.run([ffmpeg, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:r=10:d=1',
                         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(background)], check=True)
@@ -132,3 +125,43 @@ def run_alignment(voice_path):
               'included': sum(word['include'] for word in result['words']),
               'flagged_for_review': sum(not word['reviewed'] for word in result['words'])}
     Path(sys.argv[sys.argv.index('--smoke-report') + 1]).write_text(json.dumps(report, indent=2), encoding='utf-8')
+
+
+def run_window():
+    """Use the normal Qt event-loop lifetime in a fresh process for startup."""
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtCore import QSettings, QTimer
+    from unittest.mock import patch
+    import app as application
+    def stage(message):
+        print('Window smoke: ' + message, flush=True)
+    app = QApplication.instance() or QApplication([])
+    stage('application created')
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        with patch.object(application, 'SETTINGS_PATH', root / 'display.json'), \
+                patch.object(application, 'DICTIONARY_PATH', root / 'dictionary.json'), \
+                patch.object(application, 'DICTIONARY_NAME_PATH', root / 'dictionary-name.json'), \
+                patch.object(application, 'MODEL_DIR', root / 'voice-model'), \
+                patch.object(application, 'QSettings', side_effect=lambda *args: QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat)), \
+                patch.object(application.MainWindow, 'prompt_model_if_missing', lambda self: None), \
+                patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Discard):
+            window = application.MainWindow()
+            stage('control window constructed')
+            assert window.record_post.isChecked() and window.updater is not None
+            window.updater.automatic.setChecked(False)
+            window.show()
+            stage('shown')
+            QTimer.singleShot(150, window.close)
+            QTimer.singleShot(3000, app.quit)
+            assert app.exec() == 0
+            stage('event loop exited')
+            assert not window.isVisible()
+            from PySide6.QtCore import QEvent
+            window.out.deleteLater()
+            window.reader.deleteLater()
+            window.deleteLater()
+            app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            stage('widgets destroyed')
+    Path(sys.argv[sys.argv.index('--smoke-report') + 1]).write_text(json.dumps({'success': True}), encoding='utf-8')
+    stage('completed')

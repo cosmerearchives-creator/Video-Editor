@@ -1,5 +1,6 @@
 import subprocess
 import time
+import weakref
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtWidgets import QMessageBox
@@ -24,14 +25,24 @@ class Task(QThread):
 class UpdateController(QObject):
     def __init__(self, window, menu):
         super().__init__(window)
-        self.window, self.task, self.installing = window, None, False
+        # QObject already owns this controller through its parent. Keeping a
+        # strong Python reference back to the window creates a teardown cycle.
+        self._window_ref = weakref.ref(window)
+        self.task, self.installing = None, False
         menu.addAction('Check for Updates…', lambda: self.check(True))
         self.automatic = menu.addAction('Check for Updates at Startup')
         self.automatic.setCheckable(True)
         self.automatic.setChecked(window.local_settings.value('updates/automatic', True, type=bool))
-        self.automatic.toggled.connect(lambda value: window.local_settings.setValue('updates/automatic', value))
+        self.automatic.toggled.connect(lambda value: self.window.local_settings.setValue('updates/automatic', value))
         menu.addAction('Roll Back to Previous Version…', self.roll_back)
-        QTimer.singleShot(3000, self.startup)
+        self.startup_timer = QTimer(self)
+        self.startup_timer.setSingleShot(True)
+        self.startup_timer.timeout.connect(self.startup)
+        self.startup_timer.start(3000)
+
+    @property
+    def window(self):
+        return self._window_ref()
 
     def startup(self):
         last = float(self.window.local_settings.value('updates/last_check', 0))

@@ -10,17 +10,19 @@ def main():
     if sys.stdout is None:
         sys.stdout = open(os.devnull, 'w')
     if sys.stderr is None:
-        if '--smoke-test' in sys.argv or '--smoke-align' in sys.argv:
+        if any(flag in sys.argv for flag in ('--smoke-test', '--smoke-align', '--smoke-window')):
             sys.stderr = open(os.devnull, 'w')
         else:
             folder = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'DynamicTeleprompter'
             folder.mkdir(parents=True, exist_ok=True)
             sys.stderr = (folder / 'application.log').open('a', encoding='utf-8')
-    if '--smoke-test' in sys.argv or '--smoke-align' in sys.argv:
+    if any(flag in sys.argv for flag in ('--smoke-test', '--smoke-align', '--smoke-window')):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         try:
-            from smoke import run, run_alignment
-            if '--smoke-align' in sys.argv:
+            from smoke import run, run_alignment, run_window
+            if '--smoke-window' in sys.argv:
+                run_window()
+            elif '--smoke-align' in sys.argv:
                 run_alignment(Path(sys.argv[sys.argv.index('--smoke-align') + 1]))
             else:
                 run()
